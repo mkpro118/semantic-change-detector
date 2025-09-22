@@ -1,0 +1,86 @@
+{
+  "name": "@mkpro118/semantic-change-detector",
+  "version": "1.0.0",
+  "description": "Semantic change detection for TypeScript and TSX code with GitHub Actions integration",
+  "main": "./dist/index.js",
+  "module": "./dist/index.js",
+  "types": "./dist/index.d.ts",
+  "bin": {
+    "semantic-change-detector": "./dist/cli.js"
+  },
+  "type": "module",
+  "engines": {
+    "node": ">=18.0.0"
+  },
+  "scripts": {
+    "analyze": "node ./dist/cli.js",
+    "build": "tsc",
+    "build:watch": "tsc --watch",
+    "clean": "rm -rf dist",
+    "format": "prettier --log-level silent --write .",
+    "format:check": "prettier --check .",
+    "lint": "eslint .",
+    "lint:fix": "eslint . --fix",
+    "prepublishOnly": "npm run build",
+    "test": "bun test",
+    "test:integration": "bun test test/integration",
+    "test:unit": "bun test test/unit",
+    "typecheck": "tsc --noEmit -p tsconfig.json"
+  },
+  "keywords": [
+    "ast",
+    "ci-cd",
+    "code-analysis",
+    "code-review",
+    "github-actions",
+    "pr-automation",
+    "react",
+    "semantic-analysis",
+    "static-analysis",
+    "testing",
+    "typescript"
+  ],
+  "author": {
+    "name": "M K",
+    "url": "https://github.com/mkpro118"
+  },
+  "license": "MIT",
+  "repository": {
+    "type": "git",
+    "url": "git+https://github.com/mkpro118/semantic-change-detector.git"
+  },
+  "bugs": {
+    "url": "https://github.com/mkpro118/semantic-change-detector/issues"
+  },
+  "files": [
+    "dist/**/*",
+    "LICENSE",
+    "README.md"
+  ],
+  "dependencies": {
+    "typescript": "^5.9.2",
+    "minimatch": "^9.0.0"
+  },
+  "devDependencies": {
+    "@types/bun": "^1.2",
+    "@types/node": "^20.0.0",
+    "bun-types": "latest",
+    "eslint": "^9.36.0",
+    "typescript-eslint": "^8.44.0",
+    "eslint-config-prettier": "^10.1.8",
+    "prettier": "^3.6.2"
+  },
+  "peerDependencies": {
+    "typescript": ">=4.5.0"
+  },
+  "publishConfig": {
+    "access": "public"
+  },
+  "exports": {
+    ".": {
+      "types": "./dist/index.d.ts",
+      "import": "./dist/index.js"
+    },
+    "./package.json": "./package.json"
+  }
+}

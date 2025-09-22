@@ -1,0 +1,10 @@
+# Generated and build output
+dist/
+build/
+coverage/
+
+# Dependencies
+node_modules/
+
+# CLI wrapper (published, not formatted)
+bin/cli.js
