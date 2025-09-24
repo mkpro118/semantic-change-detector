@@ -63,6 +63,16 @@ class Logger {
       console.error(`[DEBUG] ${message}`); // Debug messages go to stderr
     }
   }
+
+  /**
+   * Outputs application results to stdout.
+   * This is for the actual application output (analysis results), not logs.
+   * Always writes to stdout regardless of log level.
+   * @param message The application output message.
+   */
+  output(message: string) {
+    console.log(message);
+  }
 }
 
 /**
