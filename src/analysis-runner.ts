@@ -343,10 +343,6 @@ export interface AnalysisOptions {
   files: string[];
   /** The desired output format. */
   outputFormat: 'json' | 'github-actions' | 'console' | 'machine';
-  /** The Pull Request number, used for GitHub Actions output. */
-  prNumber?: number;
-  /** The repository slug (e.g., 'owner/repo'), used for GitHub Actions. */
-  repo?: string;
   /** The path to write JSON output to. */
   outputFile?: string;
   /** Flag to enable maximum debug logging. */
