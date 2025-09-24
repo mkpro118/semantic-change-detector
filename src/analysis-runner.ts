@@ -13,6 +13,7 @@ import * as ts from 'typescript';
 import { fileURLToPath } from 'url';
 import { analyzeSemanticChanges } from './analyzers/semantic-analyzer.js';
 import { createSemanticContext } from './context/semantic-context-builder.js';
+import { formatForGitHubActions } from './formatters/github-actions.js';
 import type {
   AnalysisResult,
   AnalyzerConfig,
@@ -118,9 +119,22 @@ export function __setGitRunner(fn: (args: string[]) => { status: number; stdout?
  * @returns The file content as a string, or null if it could not be retrieved.
  */
 export function getFileContent(filePath: string, ref: string): string | null {
-  const safeRef = /^[A-Za-z0-9._:\/\-]+$/.test(ref) ? ref : '';
   const safePath = /^[A-Za-z0-9._\/#\-]+$/.test(filePath) ? filePath : '';
-  if (!safeRef || !safePath) {
+  if (!safePath) {
+    return null;
+  }
+
+  // Handle working tree (current filesystem) reference
+  if (ref === '.') {
+    try {
+      return fs.readFileSync(filePath, 'utf8');
+    } catch {
+      return null;
+    }
+  }
+
+  const safeRef = /^[A-Za-z0-9._:\/\-]+$/.test(ref) ? ref : '';
+  if (!safeRef) {
     return null;
   }
 
@@ -193,10 +207,15 @@ export function generateDiffHunks(
 ): DiffHunk[] {
   try {
     const safeRefA = /^[A-Za-z0-9._:\/\-]+$/.test(baseRef) ? baseRef : '';
-    const safeRefB = /^[A-Za-z0-9._:\/\-]+$/.test(headRef) ? headRef : '';
+    const safeRefB = /^[A-Za-z0-9._:\/\-]+$/.test(headRef) || headRef === '.' ? headRef : '';
     const safePath = /^[A-Za-z0-9._\/#\-]+$/.test(filePath) ? filePath : '';
     if (safeRefA && safeRefB && safePath) {
-      const res = gitRunner(['diff', '--unified=0', safeRefA, safeRefB, '--', safePath]);
+      const args = ['diff', '--unified=0', safeRefA];
+      if (safeRefB !== '.') {
+        args.push(safeRefB);
+      }
+      args.push('--', safePath);
+      const res = gitRunner(args);
       if (res.status === 0 && typeof res.stdout === 'string') {
         const parsed = parseUnifiedDiff(res.stdout, filePath);
         if (parsed.length > 0) return parsed;
@@ -289,10 +308,15 @@ export function parseUnifiedDiff(patch: string, filePath: string): DiffHunk[] {
 export function hasDiffs(filePath: string, baseRef: string, headRef: string): boolean {
   try {
     const safeRefA = /^[A-Za-z0-9._:\/\-~^]+$/.test(baseRef) ? baseRef : '';
-    const safeRefB = /^[A-Za-z0-9._:\/\-~^]+$/.test(headRef) ? headRef : '';
+    const safeRefB = /^[A-Za-z0-9._:\/\-~^]+$/.test(headRef) || headRef === '.' ? headRef : '';
     const safePath = /^[A-Za-z0-9._\/#\-]+$/.test(filePath) ? filePath : '';
     if (safeRefA && safeRefB && safePath) {
-      const res = gitRunner(['diff', '--unified=0', safeRefA, safeRefB, '--', safePath]);
+      const args = ['diff', '--unified=0', safeRefA];
+      if (safeRefB !== '.') {
+        args.push(safeRefB);
+      }
+      args.push('--', safePath);
+      const res = gitRunner(args);
       // Check for the presence of hunk markers
       if (res.status === 0 && typeof res.stdout === 'string' && res.stdout.includes('@@')) {
         return true;
@@ -382,8 +406,8 @@ export async function runSemanticAnalysis(options: AnalysisOptions): Promise<Ana
   const failedFiles: Array<{ filePath: string; error: string }> = [];
   let filesAnalyzed = 0;
 
-  const filesToAnalyzeInitially = options.files.filter((file) =>
-    shouldAnalyzeFile(file, effectiveConfig), // Use effectiveConfig
+  const filesToAnalyzeInitially = options.files.filter(
+    (file) => shouldAnalyzeFile(file, effectiveConfig), // Use effectiveConfig
   );
   logger.verbose(
     `Filtered down to ${filesToAnalyzeInitially.length} files based on include/exclude rules.`,
@@ -399,8 +423,13 @@ export async function runSemanticAnalysis(options: AnalysisOptions): Promise<Ana
         logger.verbose(`Skipping ${file} (no diffs)`);
       }
     } catch (error) {
-      logger.debug(`Error checking diffs for ${file}: ${error instanceof Error ? error.message : String(error)}`);
-      failedFiles.push({ filePath: file, error: `Diff check failed: ${error instanceof Error ? error.message : String(error)}` });
+      logger.debug(
+        `Error checking diffs for ${file}: ${error instanceof Error ? error.message : String(error)}`,
+      );
+      failedFiles.push({
+        filePath: file,
+        error: `Diff check failed: ${error instanceof Error ? error.message : String(error)}`,
+      });
     }
   }
   logger.verbose(`Filtered down to ${filesWithDiffs.length} files that have diffs.`);
@@ -435,7 +464,10 @@ export async function runSemanticAnalysis(options: AnalysisOptions): Promise<Ana
         filesAnalyzed++;
       } else {
         logger.debug(`Error analyzing ${result.filePath}: ${result.error}`);
-        failedFiles.push({ filePath: result.filePath, error: result.error || 'Unknown analysis error' });
+        failedFiles.push({
+          filePath: result.filePath,
+          error: result.error || 'Unknown analysis error',
+        });
       }
     }
   } catch (error) {
@@ -622,7 +654,16 @@ async function outputResults(result: AnalysisResult, options: AnalysisOptions): 
       break;
     }
     case 'github-actions': {
+      // Write JSON result file for reference
       await fs.promises.writeFile(outputFile, JSON.stringify(result, null, 2), 'utf8');
+
+      // Format and output GitHub Actions annotations to stdout
+      const annotations = formatForGitHubActions(result);
+      for (const annotation of annotations) {
+        logger.output(annotation);
+      }
+
+      // Write summary information as logs (to stderr in GitHub Actions mode)
       logger.verbose(`::group::Analysis Results`);
       logger.verbose(`Files analyzed: ${result.filesAnalyzed}`);
       logger.verbose(`Total changes: ${result.totalChanges}`);
@@ -634,7 +675,7 @@ async function outputResults(result: AnalysisResult, options: AnalysisOptions): 
 
       if (result.failedFiles.length > 0) {
         logger.verbose(`::error::Failed to analyze ${result.failedFiles.length} files:`);
-        result.failedFiles.forEach(file => {
+        result.failedFiles.forEach((file) => {
           logger.verbose(`::error file=${file.filePath}::${file.error}`);
         });
       }
@@ -658,7 +699,7 @@ async function outputResults(result: AnalysisResult, options: AnalysisOptions): 
 
       if (result.failedFiles.length > 0) {
         logger.verbose(`\nFailed to analyze ${result.failedFiles.length} files:`);
-        result.failedFiles.forEach(file => {
+        result.failedFiles.forEach((file) => {
           logger.verbose(`   - ${file.filePath}: ${file.error}`);
         });
       }
@@ -719,7 +760,9 @@ function loadConfig(options: AnalysisOptions): AnalyzerConfig {
       loadedConfig = JSON.parse(configContent);
       logger.verbose(`Loaded configuration from ${configPath}`);
     } catch (error) {
-      logger.debug(`Failed to load configuration from ${configPath}: ${error instanceof Error ? error.message : String(error)}`);
+      logger.debug(
+        `Failed to load configuration from ${configPath}: ${error instanceof Error ? error.message : String(error)}`,
+      );
     }
   } else {
     logger.verbose(`No custom configuration file found at ${configPath}. Using default settings.`);
