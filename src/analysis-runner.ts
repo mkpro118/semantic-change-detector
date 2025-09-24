@@ -25,6 +25,30 @@ import { mapConcurrent } from './utils/concurrency.js';
 import { logger } from './utils/logger.js';
 
 /**
+ * Checks if a file path is valid for the given git reference.
+ * For working tree (.), checks filesystem. For git refs, checks git history.
+ * This is more robust than regex-based validation for complex file paths.
+ * @param filePath The file path to check
+ * @param ref The git reference (e.g., commit SHA, branch name, or '.' for working tree)
+ * @returns True if the file exists in the specified context
+ */
+function isValidFilePath(filePath: string, ref: string): boolean {
+  try {
+    // For working tree, check filesystem
+    if (ref === '.') {
+      fs.statSync(filePath);
+      return true;
+    }
+
+    // For git refs, use git cat-file -e to check if file exists in that revision
+    const result = gitRunner(['cat-file', '-e', `${ref}:${filePath}`]);
+    return result.status === 0;
+  } catch {
+    return false;
+  }
+}
+
+/**
  * Represents a single semantic change detected in a file.
  */
 export type FileChange = {
@@ -119,13 +143,16 @@ export function __setGitRunner(fn: (args: string[]) => { status: number; stdout?
  * @returns The file content as a string, or null if it could not be retrieved.
  */
 export function getFileContent(filePath: string, ref: string): string | null {
-  const safePath = /^[A-Za-z0-9._\/#\-]+$/.test(filePath) ? filePath : '';
-  if (!safePath) {
+  const safeRef = /^[A-Za-z0-9._:\/\-~^]+$/.test(ref) ? ref : '';
+  if (!safeRef) {
     return null;
   }
 
   // Handle working tree (current filesystem) reference
   if (ref === '.') {
+    if (!isValidFilePath(filePath, ref)) {
+      return null;
+    }
     try {
       return fs.readFileSync(filePath, 'utf8');
     } catch {
@@ -133,12 +160,7 @@ export function getFileContent(filePath: string, ref: string): string | null {
     }
   }
 
-  const safeRef = /^[A-Za-z0-9._:\/\-]+$/.test(ref) ? ref : '';
-  if (!safeRef) {
-    return null;
-  }
-
-  const res = gitRunner(['show', `${safeRef}:${safePath}`]);
+  const res = gitRunner(['show', `${safeRef}:${filePath}`]);
 
   if (res.status === 0 && typeof res.stdout === 'string') {
     return res.stdout;
@@ -206,15 +228,18 @@ export function generateDiffHunks(
   headRef: string,
 ): DiffHunk[] {
   try {
-    const safeRefA = /^[A-Za-z0-9._:\/\-]+$/.test(baseRef) ? baseRef : '';
-    const safeRefB = /^[A-Za-z0-9._:\/\-]+$/.test(headRef) || headRef === '.' ? headRef : '';
-    const safePath = /^[A-Za-z0-9._\/#\-]+$/.test(filePath) ? filePath : '';
-    if (safeRefA && safeRefB && safePath) {
+    const safeRefA = /^[A-Za-z0-9._:\/\-~^]+$/.test(baseRef) ? baseRef : '';
+    const safeRefB = /^[A-Za-z0-9._:\/\-~^]+$/.test(headRef) || headRef === '.' ? headRef : '';
+
+    // For working tree, validate file exists
+    if (headRef === '.' && !isValidFilePath(filePath, headRef)) {
+      // Fall through to fallback
+    } else if (safeRefA && safeRefB) {
       const args = ['diff', '--unified=0', safeRefA];
       if (safeRefB !== '.') {
         args.push(safeRefB);
       }
-      args.push('--', safePath);
+      args.push('--', filePath);
       const res = gitRunner(args);
       if (res.status === 0 && typeof res.stdout === 'string') {
         const parsed = parseUnifiedDiff(res.stdout, filePath);
@@ -309,13 +334,18 @@ export function hasDiffs(filePath: string, baseRef: string, headRef: string): bo
   try {
     const safeRefA = /^[A-Za-z0-9._:\/\-~^]+$/.test(baseRef) ? baseRef : '';
     const safeRefB = /^[A-Za-z0-9._:\/\-~^]+$/.test(headRef) || headRef === '.' ? headRef : '';
-    const safePath = /^[A-Za-z0-9._\/#\-]+$/.test(filePath) ? filePath : '';
-    if (safeRefA && safeRefB && safePath) {
+
+    // For working tree, validate file exists
+    if (headRef === '.' && !isValidFilePath(filePath, headRef)) {
+      return false;
+    }
+
+    if (safeRefA && safeRefB) {
       const args = ['diff', '--unified=0', safeRefA];
       if (safeRefB !== '.') {
         args.push(safeRefB);
       }
-      args.push('--', safePath);
+      args.push('--', filePath);
       const res = gitRunner(args);
       // Check for the presence of hunk markers
       if (res.status === 0 && typeof res.stdout === 'string' && res.stdout.includes('@@')) {
