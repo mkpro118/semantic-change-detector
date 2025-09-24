@@ -78,8 +78,6 @@ git diff --name-only main...feature-branch | bunx semantic-change-detector --std
   - `json`: Full analysis result as JSON, written to `--output-file`.
   - `machine`: Full analysis result as JSON, printed to stdout. Ideal for piping to other tools.
   - `github-actions`: Formatted output for GitHub Actions, including PR comments and file annotations.
-- `--pr-number=<number>`: (Optional) The pull request number (required for `github-actions` output format).
-- `--repo=<owner/repo>`: (Optional) The repository slug (required for `github-actions` output format).
 - `--output-file=<path>`: (Optional) The file path to write JSON output to (for `json` and `github-actions` formats).
 - `--debug`: (Optional) Enables verbose debug logging for development and troubleshooting.
 - `--quiet`: (Optional) Suppresses all console output except for critical errors and exit codes.
@@ -190,9 +188,7 @@ jobs:
             --stdin \
             --base-ref=${{ github.event.pull_request.base.sha }} \
             --head-ref=${{ github.event.pull_request.head.sha }} \
-            --output-format=github-actions \
-            --pr-number=${{ github.event.number }} \
-            --repo=${{ github.repository }}
+            --output-format=github-actions
 ```
 
 ## Configuration

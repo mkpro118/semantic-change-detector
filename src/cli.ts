@@ -37,12 +37,6 @@ function parseCommandLineArgs(args: string[]): Partial<AnalysisOptions> {
       if (v === 'json' || v === 'github-actions' || v === 'console' || v === 'machine') {
         options.outputFormat = v;
       }
-    } else if (arg.startsWith('--pr-number=')) {
-      const [, v] = arg.split('=');
-      if (v) options.prNumber = Number.parseInt(v, 10);
-    } else if (arg.startsWith('--repo=')) {
-      const [, v] = arg.split('=');
-      if (v) options.repo = v;
     } else if (arg.startsWith('--output-file=')) {
       const [, v] = arg.split('=');
       if (v) options.outputFile = v;
@@ -93,8 +87,6 @@ function validateOptions(
     headRef: ensured.headRef,
     files: ensured.files || [],
     outputFormat: ensured.outputFormat || 'console',
-    prNumber: ensured.prNumber,
-    repo: ensured.repo,
     outputFile: ensured.outputFile,
     debug: ensured.debug || false,
     quiet: ensured.quiet || false,
@@ -126,10 +118,6 @@ OUTPUT OPTIONS:
   --output-format=<format> Output format: console (default), json, machine, github-actions
   --output-file=<path>     File path to write JSON output (for json/github-actions formats)
 
-GITHUB ACTIONS OPTIONS:
-  --pr-number=<number>     Pull request number (required for github-actions format)
-  --repo=<owner/repo>      Repository slug (required for github-actions format)
-
 GENERAL OPTIONS:
   --debug                  Enable verbose debug logging
   --quiet                  Suppress all console output except critical errors
@@ -154,9 +142,7 @@ EXAMPLES:
     --stdin \\
     --base-ref="\${github.event.pull_request.base.sha}" \\
     --head-ref="\${github.event.pull_request.head.sha}" \\
-    --output-format=github-actions \\
-    --pr-number="\${github.event.number}" \\
-    --repo="\${github.repository}"
+    --output-format=github-actions
 
 For more information, visit: https://github.com/mkpro118/semantic-change-detector
 `);
