@@ -73,7 +73,7 @@ describe('Analysis Runner - Core Functions', () => {
         // Mock the spawnSync behavior for the default git runner
         return {
           status: 0,
-          stdout: 'default runner content'
+          stdout: 'default runner content',
         };
       };
       __setGitRunner(originalGitRunner);
@@ -94,6 +94,30 @@ describe('Analysis Runner - Core Functions', () => {
       __setGitRunner(() => ({ status: 0, stdout: null as any }));
       const result = getFileContent('test.ts', 'main');
       expect(result).toBeNull(); // Should return null due to non-string stdout
+    });
+
+    test('handles file paths with parentheses correctly', () => {
+      // Regression test: File paths with parentheses should work
+      __setGitRunner(() => ({ status: 0, stdout: 'file content' }));
+      const result = getFileContent('apps/web/src/app/(dashboard)/billing/actions.ts', 'main');
+      expect(result).toBe('file content');
+    });
+
+    test('handles file paths with brackets correctly', () => {
+      // Regression test: File paths with brackets should work
+      __setGitRunner(() => ({ status: 0, stdout: 'component content' }));
+      const result = getFileContent('src/components/ui/[slug]/page.ts', 'main');
+      expect(result).toBe('component content');
+    });
+
+    test('handles complex file paths with multiple special characters', () => {
+      // Regression test: Complex file paths with various special characters
+      __setGitRunner(() => ({ status: 0, stdout: 'complex file content' }));
+      const result = getFileContent(
+        'apps/web/src/app/(dashboard)/[tenant]/billing-[id]/actions.ts',
+        'main',
+      );
+      expect(result).toBe('complex file content');
     });
   });
 
@@ -140,7 +164,9 @@ describe('Analysis Runner - Core Functions', () => {
       const result = hasDiffs('test.ts', 'base', 'head');
       expect(result).toBe(false);
       expect(logger.debug).toHaveBeenCalledWith(
-        expect.stringContaining('Error checking for diffs in test.ts: Git command failed with exception')
+        expect.stringContaining(
+          'Error checking for diffs in test.ts: Git command failed with exception',
+        ),
       );
     });
 
@@ -152,8 +178,76 @@ describe('Analysis Runner - Core Functions', () => {
       const result = hasDiffs('test.ts', 'base', 'head');
       expect(result).toBe(false);
       expect(logger.debug).toHaveBeenCalledWith(
-        expect.stringContaining('Error checking for diffs in test.ts: String error')
+        expect.stringContaining('Error checking for diffs in test.ts: String error'),
       );
+    });
+
+    test('handles file paths with parentheses correctly', () => {
+      // Regression test: File paths with parentheses should work
+      // Before fix: path validation would fail due to missing () in regex
+      __setGitRunner(() => ({ status: 0, stdout: '@@ -1,1 +1,1 @@\n-old\n+new' }));
+      const result = hasDiffs('apps/web/src/app/(dashboard)/billing/actions.ts', 'base', 'head');
+      expect(result).toBe(true);
+    });
+
+    test('handles file paths with brackets correctly', () => {
+      // Regression test: File paths with brackets should work
+      __setGitRunner(() => ({ status: 0, stdout: '@@ -1,1 +1,1 @@\n-old\n+new' }));
+      const result = hasDiffs('src/components/ui/[slug]/page.ts', 'base', 'head');
+      expect(result).toBe(true);
+    });
+
+    test('handles complex file paths with multiple special characters', () => {
+      // Regression test: Complex file paths with various special characters
+      __setGitRunner(() => ({ status: 0, stdout: '@@ -1,1 +1,1 @@\n-old\n+new' }));
+      const result = hasDiffs(
+        'apps/web/src/app/(dashboard)/[tenant]/billing-[id]/actions.ts',
+        'base',
+        'head',
+      );
+      expect(result).toBe(true);
+    });
+
+    test('handles files that exist in git but not filesystem', () => {
+      // Mock git cat-file -e to succeed (file exists in git history)
+      // Mock git diff to return changes
+      let gitCallCount = 0;
+      __setGitRunner((args: string[]) => {
+        gitCallCount++;
+        if (args[0] === 'cat-file' && args[1] === '-e') {
+          // File exists in git revision
+          return { status: 0, stdout: '' };
+        } else if (args[0] === 'diff') {
+          // File has changes
+          return { status: 0, stdout: '@@ -1,1 +1,1 @@\n-deleted file\n+new content' };
+        }
+        return { status: 1, stdout: '' };
+      });
+
+      const result = hasDiffs('deleted-file.ts', 'base', 'head');
+      expect(result).toBe(true);
+      // Should have called both git cat-file and git diff
+      expect(gitCallCount).toBeGreaterThanOrEqual(1);
+    });
+
+    test('correctly validates working tree files vs git files', () => {
+      // Test that working tree (.) uses filesystem check, git refs use git cat-file
+      let gitCallCount = 0;
+      __setGitRunner((args: string[]) => {
+        gitCallCount++;
+        if (args[0] === 'cat-file' && args[1] === '-e') {
+          // File exists in git revision but not in working tree
+          return { status: 0, stdout: '' };
+        } else if (args[0] === 'diff') {
+          return { status: 0, stdout: '@@ -1,1 +1,1 @@\n-old\n+new' };
+        }
+        return { status: 1, stdout: '' };
+      });
+
+      // This should work because it's checking git refs, not filesystem
+      const result = hasDiffs('file-only-in-git.ts', 'commit1', 'commit2');
+      expect(result).toBe(true);
+      expect(gitCallCount).toBeGreaterThanOrEqual(1);
     });
   });
 
@@ -231,7 +325,7 @@ diff --git a/another-file.txt b/another-file.txt`;
     test('returns git diff result when successful', () => {
       __setGitRunner(() => ({
         status: 0,
-        stdout: '@@ -1,1 +1,1 @@\n-old\n+new'
+        stdout: '@@ -1,1 +1,1 @@\n-old\n+new',
       }));
 
       const result = generateDiffHunks('old', 'new', 'test.ts', 'base', 'head');
@@ -258,6 +352,60 @@ diff --git a/another-file.txt b/another-file.txt`;
       expect(result).toHaveLength(1);
       expect(result[0]?.file).toBe('test.ts');
     });
+
+    test('handles file paths with parentheses correctly', () => {
+      // Regression test: File paths with parentheses should work
+      __setGitRunner(() => ({
+        status: 0,
+        stdout: '@@ -1,1 +1,1 @@\n-old\n+new',
+      }));
+
+      const result = generateDiffHunks(
+        'old',
+        'new',
+        'apps/web/src/app/(dashboard)/billing/actions.ts',
+        'base',
+        'head',
+      );
+      expect(result).toHaveLength(1);
+      expect(result[0]?.file).toBe('apps/web/src/app/(dashboard)/billing/actions.ts');
+    });
+
+    test('handles file paths with brackets correctly', () => {
+      // Regression test: File paths with brackets should work
+      __setGitRunner(() => ({
+        status: 0,
+        stdout: '@@ -10,3 +10,3 @@\n-old component\n+new component',
+      }));
+
+      const result = generateDiffHunks(
+        'old component',
+        'new component',
+        'src/components/ui/[slug]/page.ts',
+        'base',
+        'head',
+      );
+      expect(result).toHaveLength(1);
+      expect(result[0]?.file).toBe('src/components/ui/[slug]/page.ts');
+    });
+
+    test('handles complex file paths with multiple special characters', () => {
+      // Regression test: Complex file paths with various special characters
+      __setGitRunner(() => ({
+        status: 0,
+        stdout: '@@ -5,2 +5,2 @@\n-original\n+modified',
+      }));
+
+      const result = generateDiffHunks(
+        'original',
+        'modified',
+        'apps/web/src/app/(dashboard)/[tenant]/billing-[id]/actions.ts',
+        'base',
+        'head',
+      );
+      expect(result).toHaveLength(1);
+      expect(result[0]?.file).toBe('apps/web/src/app/(dashboard)/[tenant]/billing-[id]/actions.ts');
+    });
   });
 
   describe('analyzeNewFile', () => {
@@ -266,7 +414,7 @@ diff --git a/another-file.txt b/another-file.txt`;
       const result = analyzeNewFile(content, 'test.ts');
 
       expect(result.length).toBeGreaterThan(0);
-      const exportChange = result.find(c => c.kind === 'exportAdded');
+      const exportChange = result.find((c) => c.kind === 'exportAdded');
       expect(exportChange).toBeDefined();
       expect(exportChange?.detail).toContain('test');
       expect(exportChange?.severity).toBe('high');
@@ -276,7 +424,7 @@ diff --git a/another-file.txt b/another-file.txt`;
       const content = 'function helper() { return 42; }';
       const result = analyzeNewFile(content, 'test.ts');
 
-      const functionChange = result.find(c => c.kind === 'functionAdded');
+      const functionChange = result.find((c) => c.kind === 'functionAdded');
       expect(functionChange).toBeDefined();
       expect(functionChange?.detail).toContain('helper');
       expect(functionChange?.severity).toBe('medium');
@@ -286,8 +434,10 @@ diff --git a/another-file.txt b/another-file.txt`;
       const content = 'export function test() { return 42; }';
       const result = analyzeNewFile(content, 'test.ts');
 
-      const exportChanges = result.filter(c => c.kind === 'exportAdded');
-      const functionChanges = result.filter(c => c.kind === 'functionAdded' && c.detail.includes('test'));
+      const exportChanges = result.filter((c) => c.kind === 'exportAdded');
+      const functionChanges = result.filter(
+        (c) => c.kind === 'functionAdded' && c.detail.includes('test'),
+      );
 
       expect(exportChanges.length).toBe(1);
       expect(functionChanges.length).toBe(0); // Should not duplicate
@@ -367,7 +517,11 @@ diff --git a/another-file.txt b/another-file.txt`;
           }
         }
         if (args[0] === 'diff') {
-          return { status: 0, stdout: '@@ -1,1 +1,1 @@\n-function oldFunction() { return 1; }\n+function newFunction() { return 2; }' };
+          return {
+            status: 0,
+            stdout:
+              '@@ -1,1 +1,1 @@\n-function oldFunction() { return 1; }\n+function newFunction() { return 2; }',
+          };
         }
         return { status: 1, stdout: '' };
       });
@@ -384,7 +538,6 @@ diff --git a/another-file.txt b/another-file.txt`;
       expect(Array.isArray(result)).toBe(true);
     });
   });
-
 
   describe('writeGitHubOutputFlag', () => {
     let tmpDir: string;
@@ -484,7 +637,7 @@ describe('Analysis Runner - Integration', () => {
 
       expect(result.filesAnalyzed).toBe(0);
       expect(logger.debug).toHaveBeenCalledWith(
-        'Error checking for diffs in src/test.ts: Git diff check failed'
+        'Error checking for diffs in src/test.ts: Git diff check failed',
       );
     });
 
@@ -508,7 +661,7 @@ describe('Analysis Runner - Integration', () => {
 
       expect(result.filesAnalyzed).toBe(0);
       expect(logger.debug).toHaveBeenCalledWith(
-        'Error checking for diffs in src/test.ts: String error during diff check'
+        'Error checking for diffs in src/test.ts: String error during diff check',
       );
     });
 
