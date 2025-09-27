@@ -34,15 +34,10 @@ describe('Logger', () => {
   test('logger is initialized with default VERBOSE level', () => {
     // Test that the logger starts with VERBOSE level by default
     logger.verbose('This should be logged by default');
-    expect(consoleLogSpy).toHaveBeenCalledWith('This should be logged by default');
+    expect(consoleErrorSpy).toHaveBeenCalledWith('This should be logged by default');
   });
 
   test('can create new Logger instance to test constructor', () => {
-    // Import the Logger class to test constructor coverage
-    const { LogLevel } = require('../../src/utils/logger.js');
-
-    // Import internal Logger class (not exposed, so we'll test via the singleton)
-    // This test ensures the constructor is covered
     logger.setLevel(LogLevel.DEBUG);
     logger.debug('Testing constructor coverage');
     expect(consoleErrorSpy).toHaveBeenCalledWith('[DEBUG] Testing constructor coverage');
@@ -74,12 +69,12 @@ describe('Logger', () => {
   test('verbose messages are logged at VERBOSE level or higher', () => {
     logger.setLevel(LogLevel.VERBOSE);
     logger.verbose('Verbose message');
-    expect(consoleLogSpy).toHaveBeenCalledWith('Verbose message');
+    expect(consoleErrorSpy).toHaveBeenCalledWith('Verbose message');
 
-    consoleLogSpy.mockClear();
+    consoleErrorSpy.mockClear();
     logger.setLevel(LogLevel.MACHINE);
     logger.verbose('Verbose message');
-    expect(consoleLogSpy).not.toHaveBeenCalled();
+    expect(consoleErrorSpy).not.toHaveBeenCalled();
   });
 
   test('debug messages are logged at DEBUG level only', () => {

@@ -23,6 +23,7 @@ describe('CLI file filtering and git integration', () => {
     verboseSpy = spyOn(logger, 'verbose').mockImplementation(() => {});
     debugSpy = spyOn(logger, 'debug').mockImplementation(() => {});
     machineSpy = spyOn(logger, 'machine').mockImplementation(() => {});
+    spyOn(logger, 'output').mockImplementation(() => {});
     consoleLogSpy = spyOn(console, 'log').mockImplementation(() => {});
   });
 
@@ -68,7 +69,7 @@ describe('CLI file filtering and git integration', () => {
         'node_modules/pkg/index.ts', // excluded
         'feature.spec.ts', // excluded
       ],
-      outputFormat: 'console',
+      outputFormat: 'machine',
     });
 
     // Should filter files correctly and find no changes
@@ -106,7 +107,7 @@ describe('CLI file filtering and git integration', () => {
       baseRef: 'BASE',
       headRef: 'HEAD',
       files: ['types/index.ts'],
-      outputFormat: 'console',
+      outputFormat: 'machine',
     });
 
     // Expect the new file to be analyzed with export and function changes
@@ -168,6 +169,7 @@ describe('CLI test requirement gating', () => {
     spyOn(logger, 'verbose').mockImplementation(() => {});
     spyOn(logger, 'debug').mockImplementation(() => {});
     spyOn(logger, 'machine').mockImplementation(() => {});
+    spyOn(logger, 'output').mockImplementation(() => {});
     spyOn(console, 'log').mockImplementation(() => {});
   });
 
@@ -243,6 +245,7 @@ describe('CLI diff scoping with real hunks', () => {
     spyOn(logger, 'verbose').mockImplementation(() => {});
     spyOn(logger, 'debug').mockImplementation(() => {});
     spyOn(logger, 'machine').mockImplementation(() => {});
+    spyOn(logger, 'output').mockImplementation(() => {});
     spyOn(console, 'log').mockImplementation(() => {});
   });
 
@@ -270,17 +273,7 @@ describe('CLI diff scoping with real hunks', () => {
       'export function b(x: number, y: number): number { return x + y }',
     ].join('\n');
 
-    // Provide a diff that only includes the change for function a (line 1)
-    const patch = [
-      'diff --git a/src/math.ts b/src/math.ts',
-      'index abcdef1..abcdef2 100644',
-      '--- a/src/math.ts',
-      '+++ b/src/math.ts',
-      '@@ -1 +1 @@',
-      '-export function a(x: number): number { return x }',
-      '+export function a(x: number, y: number): number { return x + y }',
-      '',
-    ].join('\n');
+    // provide a diff in the git runner only
 
     __setGitRunner((args: string[]) => {
       if (args[0] === 'show') {
@@ -299,7 +292,7 @@ describe('CLI diff scoping with real hunks', () => {
       baseRef: 'BASE',
       headRef: 'HEAD',
       files: ['src/math.ts'],
-      outputFormat: 'console',
+      outputFormat: 'machine',
     });
 
     // Should scope analysis to diff hunks correctly
@@ -317,6 +310,7 @@ describe('Configuration loading', () => {
     spyOn(logger, 'verbose').mockImplementation(() => {});
     spyOn(logger, 'debug').mockImplementation(() => {});
     spyOn(logger, 'machine').mockImplementation(() => {});
+    spyOn(logger, 'output').mockImplementation(() => {});
     spyOn(console, 'log').mockImplementation(() => {});
 
     originalCwd = process.cwd();
@@ -337,13 +331,19 @@ describe('Configuration loading', () => {
       baseRef: 'BASE',
       headRef: 'HEAD',
       files: ['src/some-file.ts'], // A dummy file that would normally be analyzed
-      outputFormat: 'console',
+      outputFormat: 'machine',
     });
 
     // Expect verbose log about using default settings
-    expect(logger.verbose).toHaveBeenCalledWith(
-      expect.stringContaining('No custom configuration file found'),
-    );
+    {
+      const calls = logger.verbose.mock.calls ?? [];
+      const texts = calls.flat();
+      expect(
+        texts.some(
+          (m) => typeof m === 'string' && m.includes('No custom configuration file found'),
+        ),
+      ).toBe(true);
+    }
     // Expect analysis to proceed with default includes (e.g., src/some-file.ts is included)
     expect(result.filesAnalyzed).toBe(0); // No diffs, so 0 files analyzed
   });
@@ -358,13 +358,17 @@ describe('Configuration loading', () => {
       baseRef: 'BASE',
       headRef: 'HEAD',
       files: ['src/some-file.ts'],
-      outputFormat: 'console',
+      outputFormat: 'machine',
     });
 
     // Expect verbose log about loading config
-    expect(logger.verbose).toHaveBeenCalledWith(
-      expect.stringContaining('Loaded configuration from'),
-    );
+    {
+      const calls = logger.verbose.mock.calls ?? [];
+      const texts = calls.flat();
+      expect(
+        texts.some((m) => typeof m === 'string' && m.includes('Loaded configuration from')),
+      ).toBe(true);
+    }
     // Expect analysis to exclude the file based on config
     expect(result.filesAnalyzed).toBe(0); // Excluded by config, so 0 files analyzed
   });
@@ -380,14 +384,21 @@ describe('Configuration loading', () => {
       baseRef: 'BASE',
       headRef: 'HEAD',
       files: ['src/another-file.ts'],
-      outputFormat: 'console',
+      outputFormat: 'machine',
       configPath: customConfigPath, // Specify custom config path
     });
 
     // Expect verbose log about loading config from custom path
-    expect(logger.verbose).toHaveBeenCalledWith(
-      expect.stringContaining(`Loaded configuration from ${customConfigPath}`),
-    );
+    {
+      const calls = logger.verbose.mock.calls ?? [];
+      const texts = calls.flat();
+      expect(
+        texts.some(
+          (m) =>
+            typeof m === 'string' && m.includes(`Loaded configuration from ${customConfigPath}`),
+        ),
+      ).toBe(true);
+    }
     // Expect analysis to exclude the file based on custom config
     expect(result.filesAnalyzed).toBe(0); // Excluded by config, so 0 files analyzed
   });
@@ -403,7 +414,7 @@ describe('Configuration loading', () => {
       baseRef: 'BASE',
       headRef: 'HEAD',
       files: ['src/only-this-file.ts'],
-      outputFormat: 'console',
+      outputFormat: 'machine',
     });
 
     // Expect the custom timeout to be applied

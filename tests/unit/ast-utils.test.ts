@@ -155,7 +155,7 @@ describe('AST Utils', () => {
           try {
             throw new Error();
           } catch (e) {
-            console.log(e);
+            const _ = e;
           }
         }
       `);

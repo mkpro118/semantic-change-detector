@@ -256,7 +256,7 @@ describe('Semantic Analysis Functions', () => {
 
       function Component() {
         return <button onClick={() => {
-          console.log('clicked');
+          // clicked
           if (condition) {
             doSomething();
           }

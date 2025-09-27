@@ -141,6 +141,39 @@ describe('Comprehensive analyzer tests: analyzeExports', () => {
     const signatureChanged = changes.filter((c) => c.kind === 'exportSignatureChanged');
     expect(signatureChanged.length).toBe(0);
   });
+
+  test('should detect changes in export signature for variables', () => {
+    const baseContent = `export const a: string = 'hello';`;
+    const headContent = `export const a: number = 123;`;
+
+    const baseSourceFile = ts.createSourceFile(
+      'exports-base.ts',
+      baseContent,
+      ts.ScriptTarget.ESNext,
+      true,
+    );
+    const headSourceFile = ts.createSourceFile(
+      'exports-modified.ts',
+      headContent,
+      ts.ScriptTarget.ESNext,
+      true,
+    );
+
+    const baseContext = createSemanticContext(baseSourceFile, []);
+    const headContext = createSemanticContext(headSourceFile, []);
+
+    const allChanges = analyzeSemanticChanges(
+      baseContext,
+      headContext,
+      [],
+      baseContent,
+      headContent,
+      {} as any,
+    );
+    const signatureChanged = allChanges.filter((c) => c.kind === 'exportSignatureChanged');
+    expect(signatureChanged.length).toBe(1);
+    expect(signatureChanged[0].detail).toContain('Export signature changed: a');
+  });
 });
 
 describe('Comprehensive analyzer tests: analyzeFunctions', () => {
