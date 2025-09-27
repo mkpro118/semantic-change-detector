@@ -9,9 +9,9 @@ import * as fs from 'fs';
 import { minimatch } from 'minimatch';
 import * as path from 'path';
 import * as process from 'process'; // Added for process.cwd()
-import * as ts from 'typescript';
+import ts from 'typescript';
 import { fileURLToPath } from 'url';
-import { analyzeSemanticChanges } from './analyzers/semantic-analyzer.js';
+import { detectSemanticChanges } from './analyzers/index.js';
 import { createSemanticContext } from './context/semantic-context-builder.js';
 import { formatForGitHubActions } from './formatters/github-actions.js';
 import type {
@@ -51,6 +51,14 @@ function isValidFilePath(filePath: string, ref: string): boolean {
 /**
  * Represents a single semantic change detected in a file.
  */
+/**
+ * FileChange describes a single semantic change within a file when
+ * running file-by-file analysis. This is the lightweight shape used by
+ * the CLI before aggregation.
+ *
+ * @library-export
+ * @public
+ */
 export type FileChange = {
   /** The line number where the change occurred. */
   line: number;
@@ -76,12 +84,12 @@ export type FileChange = {
  * @param config The analyzer configuration.
  * @returns An array of detected semantic changes for the file.
  */
-export function analyzeFileChanges(
+export async function analyzeFileChanges(
   filePath: string,
   baseRef: string,
   headRef: string,
   config: AnalyzerConfig,
-): Array<FileChange> {
+): Promise<Array<FileChange>> {
   const baseContent = getFileContent(filePath, baseRef);
   const headContent = getFileContent(filePath, headRef);
 
@@ -99,21 +107,29 @@ export function analyzeFileChanges(
     return [];
   }
 
-  const hunks = generateDiffHunks(baseContent, headContent, filePath, baseRef, headRef);
+  const locatedChanges = await detectSemanticChanges({
+    baseFilePath: filePath,
+    baseCode: baseContent,
+    modifiedFilePath: filePath,
+    modifiedCode: headContent,
+    config: {
+      sideEffectCallees: config.sideEffectCallees,
+      testGlobs: config.testGlobs,
+      bypassLabels: config.bypassLabels,
+    },
+  });
 
-  const baseSourceFile = ts.createSourceFile(filePath, baseContent, ts.ScriptTarget.Latest, true);
-  const headSourceFile = ts.createSourceFile(filePath, headContent, ts.ScriptTarget.Latest, true);
-
-  const baseContext = createSemanticContext(baseSourceFile, config.sideEffectCallees);
-  const headContext = createSemanticContext(headSourceFile, config.sideEffectCallees);
-
-  const changes = analyzeSemanticChanges(
-    baseContext,
-    headContext,
-    hunks,
-    baseContent,
-    headContent,
-    config,
+  // Convert internal LocatedSemanticChange[] to FileChange[] format
+  const changes = locatedChanges.map(
+    (change): FileChange => ({
+      line: change.line,
+      column: change.column,
+      kind: change.kind,
+      detail: change.detail,
+      severity: change.severity,
+      astNode: change.astNode,
+      context: change.context,
+    }),
   );
 
   return changes;
@@ -143,11 +159,6 @@ export function __setGitRunner(fn: (args: string[]) => { status: number; stdout?
  * @returns The file content as a string, or null if it could not be retrieved.
  */
 export function getFileContent(filePath: string, ref: string): string | null {
-  const safeRef = /^[A-Za-z0-9._:\/\-~^]+$/.test(ref) ? ref : '';
-  if (!safeRef) {
-    return null;
-  }
-
   // Handle working tree (current filesystem) reference
   if (ref === '.') {
     if (!isValidFilePath(filePath, ref)) {
@@ -160,7 +171,7 @@ export function getFileContent(filePath: string, ref: string): string | null {
     }
   }
 
-  const res = gitRunner(['show', `${safeRef}:${filePath}`]);
+  const res = gitRunner(['show', `${ref}:${filePath}`]);
 
   if (res.status === 0 && typeof res.stdout === 'string') {
     return res.stdout;
@@ -228,16 +239,13 @@ export function generateDiffHunks(
   headRef: string,
 ): DiffHunk[] {
   try {
-    const safeRefA = /^[A-Za-z0-9._:\/\-~^]+$/.test(baseRef) ? baseRef : '';
-    const safeRefB = /^[A-Za-z0-9._:\/\-~^]+$/.test(headRef) || headRef === '.' ? headRef : '';
-
     // For working tree, validate file exists
     if (headRef === '.' && !isValidFilePath(filePath, headRef)) {
       // Fall through to fallback
-    } else if (safeRefA && safeRefB) {
-      const args = ['diff', '--unified=0', safeRefA];
-      if (safeRefB !== '.') {
-        args.push(safeRefB);
+    } else {
+      const args = ['diff', '--unified=0', baseRef];
+      if (headRef !== '.') {
+        args.push(headRef);
       }
       args.push('--', filePath);
       const res = gitRunner(args);
@@ -332,25 +340,20 @@ export function parseUnifiedDiff(patch: string, filePath: string): DiffHunk[] {
  */
 export function hasDiffs(filePath: string, baseRef: string, headRef: string): boolean {
   try {
-    const safeRefA = /^[A-Za-z0-9._:\/\-~^]+$/.test(baseRef) ? baseRef : '';
-    const safeRefB = /^[A-Za-z0-9._:\/\-~^]+$/.test(headRef) || headRef === '.' ? headRef : '';
-
     // For working tree, validate file exists
     if (headRef === '.' && !isValidFilePath(filePath, headRef)) {
       return false;
     }
 
-    if (safeRefA && safeRefB) {
-      const args = ['diff', '--unified=0', safeRefA];
-      if (safeRefB !== '.') {
-        args.push(safeRefB);
-      }
-      args.push('--', filePath);
-      const res = gitRunner(args);
-      // Check for the presence of hunk markers
-      if (res.status === 0 && typeof res.stdout === 'string' && res.stdout.includes('@@')) {
-        return true;
-      }
+    const args = ['diff', '--unified=0', baseRef];
+    if (headRef !== '.') {
+      args.push(headRef);
+    }
+    args.push('--', filePath);
+    const res = gitRunner(args);
+    // Check for the presence of hunk markers
+    if (res.status === 0 && typeof res.stdout === 'string' && res.stdout.includes('@@')) {
+      return true;
     }
   } catch (error) {
     logger.debug(
@@ -364,7 +367,15 @@ export function hasDiffs(filePath: string, baseRef: string, headRef: string): bo
 /**
  * Defines the shape of the command-line options for the CLI.
  */
-export interface AnalysisOptions {
+/**
+ * AnalysisOptions defines the CLI's user-configurable options. These
+ * values determine which refs and files are analyzed and how results
+ * are reported.
+ *
+ * @library-export
+ * @public
+ */
+export type AnalysisOptions = {
   /** The git ref for the base version (e.g., main, sha). */
   baseRef: string;
   /** The git ref for the head version (e.g., feature-branch, sha). */
@@ -387,7 +398,7 @@ export interface AnalysisOptions {
   stdin?: boolean;
   /** Path to a custom analyzer configuration file. */
   configPath?: string;
-}
+};
 
 /**
  * The default configuration for the semantic analyzer.
@@ -407,6 +418,7 @@ const DEFAULT_CONFIG: AnalyzerConfig = {
     'gtag',
     'dataLayer.*',
   ],
+  sideEffectModules: [],
   testGlobs: ['**/*.test.*', '**/*.spec.*'],
   bypassLabels: ['skip-tests', 'docs-only', 'trivial'],
   timeoutMs: 120000,
@@ -662,6 +674,48 @@ function generateSummary(
 }
 
 /**
+ * Formats analysis results as sed/awk friendly output.
+ * Uses colon-separated fields that can be easily parsed by shell tools.
+ * @param result The structured analysis result.
+ */
+function formatMachineOutput(result: AnalysisResult): void {
+  // Helper function to escape colons and newlines in fields
+  const escapeField = (field: string | undefined): string => {
+    if (field === undefined || field === null) return '';
+    return field.toString().replace(/:/g, '\\:').replace(/\n/g, '\\n').replace(/\r/g, '\\r');
+  };
+
+  // Output summary line
+  logger.machine(
+    `SUMMARY:${result.requiresTests}:${result.filesAnalyzed}:${result.totalChanges}:${result.severityBreakdown.high}:${result.severityBreakdown.medium}:${result.severityBreakdown.low}`,
+  );
+
+  // Output each change as a separate line
+  for (const change of result.changes) {
+    logger.machine(
+      `CHANGE:${escapeField(change.file)}:${change.line}:${change.column}:${change.severity}:${escapeField(change.kind)}:${escapeField(change.detail)}:${escapeField(change.astNode)}:${escapeField(change.context)}`,
+    );
+  }
+
+  // Output failed files
+  for (const failed of result.failedFiles) {
+    logger.machine(`FAILED:${escapeField(failed.filePath)}:${escapeField(failed.error)}`);
+  }
+
+  // Output performance metrics
+  logger.machine(
+    `PERFORMANCE:${result.performance.analysisTimeMs}:${result.performance.memoryUsageMB}`,
+  );
+
+  // Output top change types
+  for (const changeType of result.topChangeTypes.slice(0, 10)) {
+    logger.machine(
+      `CHANGETYPE:${escapeField(changeType.kind)}:${changeType.count}:${changeType.maxSeverity}`,
+    );
+  }
+}
+
+/**
  * Outputs the analysis results in the specified format.
  * @param result The structured analysis result.
  * @param options The command-line options.
@@ -671,7 +725,7 @@ async function outputResults(result: AnalysisResult, options: AnalysisOptions): 
 
   switch (options.outputFormat) {
     case 'machine': {
-      logger.machine(JSON.stringify(result, null, 2));
+      formatMachineOutput(result);
       break;
     }
     case 'json': {
@@ -715,25 +769,25 @@ async function outputResults(result: AnalysisResult, options: AnalysisOptions): 
       break;
     }
     case 'console': {
-      logger.verbose('\nAnalysis Results:');
-      logger.verbose(`   Files analyzed: ${result.filesAnalyzed}`);
-      logger.verbose(`   Total changes: ${result.totalChanges}`);
-      logger.verbose(`   High severity: ${result.severityBreakdown.high}`);
-      logger.verbose(`   Medium severity: ${result.severityBreakdown.medium}`);
-      logger.verbose(`   Low severity: ${result.severityBreakdown.low}`);
-      logger.verbose(`   Tests required: ${result.requiresTests ? 'Yes' : 'No'}`);
+      logger.output('\nAnalysis Results:');
+      logger.output(`   Files analyzed: ${result.filesAnalyzed}`);
+      logger.output(`   Total changes: ${result.totalChanges}`);
+      logger.output(`   High severity: ${result.severityBreakdown.high}`);
+      logger.output(`   Medium severity: ${result.severityBreakdown.medium}`);
+      logger.output(`   Low severity: ${result.severityBreakdown.low}`);
+      logger.output(`   Tests required: ${result.requiresTests ? 'Yes' : 'No'}`);
 
       if (result.failedFiles.length > 0) {
-        logger.verbose(`\nFailed to analyze ${result.failedFiles.length} files:`);
+        logger.output(`\nFailed to analyze ${result.failedFiles.length} files:`);
         result.failedFiles.forEach((file) => {
-          logger.verbose(`   - ${file.filePath}: ${file.error}`);
+          logger.output(`   - ${file.filePath}: ${file.error}`);
         });
       }
 
       if (result.topChangeTypes.length > 0) {
-        logger.verbose('\nTop change types:');
+        logger.output('\nTop change types:');
         result.topChangeTypes.slice(0, 5).forEach((change) => {
-          logger.verbose(`   ${change.kind}: ${change.count} (${change.maxSeverity})`);
+          logger.output(`   ${change.kind}: ${change.count} (${change.maxSeverity})`);
         });
       }
       break;
@@ -783,7 +837,17 @@ function loadConfig(options: AnalysisOptions): AnalyzerConfig {
   if (fs.existsSync(configPath)) {
     try {
       const configContent = fs.readFileSync(configPath, 'utf8');
-      loadedConfig = JSON.parse(configContent);
+      const parsed = JSON.parse(configContent) as {
+        include?: string[];
+        exclude?: string[];
+        sideEffectCallees?: string[];
+        sideEffectModules?: string[];
+        testGlobs?: string[];
+        bypassLabels?: string[];
+        timeoutMs?: number;
+        maxMemoryMB?: number;
+      };
+      loadedConfig = parsed;
       logger.verbose(`Loaded configuration from ${configPath}`);
     } catch (error) {
       logger.debug(

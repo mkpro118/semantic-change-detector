@@ -316,6 +316,8 @@ export type AnalyzerConfig = {
   exclude: string[];
   /** Patterns of callees considered side-effectful. */
   sideEffectCallees: string[];
+  /** Glob patterns for modules considered to have side effects. */
+  sideEffectModules?: string[];
   /** Glob patterns matching test files. */
   testGlobs: string[];
   /** Labels that permit skipping tests. */

@@ -431,6 +431,8 @@ function processCallExpression(
       name: hookName,
       dependencies,
       type,
+      line: line + 1,
+      column: character + 1,
     });
   }
 

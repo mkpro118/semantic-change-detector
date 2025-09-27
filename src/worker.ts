@@ -8,12 +8,12 @@ import { parentPort, workerData } from 'worker_threads';
 import { analyzeFileChanges } from './analysis-runner.js';
 import type { AnalyzerConfig } from './types/index.js';
 
-interface WorkerData {
+type WorkerData = {
   filePath: string;
   baseRef: string;
   headRef: string;
   config: AnalyzerConfig;
-}
+};
 
 // Ensure this script is running as a worker.
 if (!parentPort) {
@@ -21,17 +21,19 @@ if (!parentPort) {
 }
 
 // Main worker logic: perform the analysis and post the result.
-try {
-  const data = workerData as WorkerData;
-  const { filePath, baseRef, headRef, config } = data;
-  const changes = analyzeFileChanges(filePath, baseRef, headRef, config);
-  parentPort.postMessage({ status: 'success', filePath, changes });
-} catch (error) {
-  const data = workerData as WorkerData;
-  const { filePath } = data;
-  parentPort.postMessage({
-    status: 'error',
-    filePath,
-    error: error instanceof Error ? error.message : String(error),
-  });
-}
+void (async () => {
+  try {
+    const data = workerData as WorkerData;
+    const { filePath, baseRef, headRef, config } = data;
+    const changes = await analyzeFileChanges(filePath, baseRef, headRef, config);
+    parentPort.postMessage({ status: 'success', filePath, changes });
+  } catch (error) {
+    const data = workerData as WorkerData;
+    const { filePath } = data;
+    parentPort.postMessage({
+      status: 'error',
+      filePath,
+      error: error instanceof Error ? error.message : String(error),
+    });
+  }
+})();

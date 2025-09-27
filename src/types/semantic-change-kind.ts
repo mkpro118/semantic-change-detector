@@ -247,6 +247,13 @@ export type SemanticChangeKind = {
   importStructureChanged: 'importStructureChanged';
 
   /**
+   * sideEffectImportAdded — A new import was added that may have side effects.
+   *
+   * Modules that only have side effects can change the behavior of the application.
+   */
+  sideEffectImportAdded: 'sideEffectImportAdded';
+
+  /**
    * interfaceModified — Contract of an interface changed.
    *
    * Adding required members or changing types can break implementers
