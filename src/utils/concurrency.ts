@@ -14,7 +14,7 @@ import { Worker } from 'worker_threads';
 export function mapConcurrent<T extends { filePath: string }, R>(
   tasks: T[],
   workerScript: string,
-  maxConcurrency: number = os.cpus().length,
+  maxConcurrency: number = Math.max(1, os.cpus().length || 1),
   timeoutMs: number = 120000, // Default timeout of 2 minutes
 ): Promise<R[]> {
   return new Promise((resolve) => {

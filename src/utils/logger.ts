@@ -2,6 +2,9 @@
 
 /**
  * Defines the verbosity levels for logging.
+ *
+ * @library-export
+ * @public
  */
 export enum LogLevel {
   /** No output except for fatal errors. */
@@ -44,12 +47,12 @@ class Logger {
 
   /**
    * Logs a message for standard, human-readable output.
-   * This is the default level of logging for user feedback.
+   * This is internal application logging and goes to stderr to keep stdout clean for actual results.
    * @param message The verbose message to log.
    */
   verbose(message: string) {
     if (this.level >= LogLevel.VERBOSE) {
-      console.log(message);
+      console.error(message);
     }
   }
 

@@ -14,31 +14,38 @@ export function findNodeByPosition(
   line: number,
   column: number,
 ): ts.Node | undefined {
-  function visit(node: ts.Node): ts.Node | undefined {
-    const { line: startLine, character: startCol } = sourceFile.getLineAndCharacterOfPosition(
-      node.getStart(),
-    );
-    const { line: endLine, character: endCol } = sourceFile.getLineAndCharacterOfPosition(
-      node.getEnd(),
-    );
-
-    if (line >= startLine && line <= endLine) {
-      if (line === startLine && column < startCol) return undefined;
-      if (line === endLine && column > endCol) return undefined;
-
-      // Check children first for more specific match
-      for (const child of node.getChildren()) {
-        const result = visit(child);
-        if (result) return result;
-      }
-
-      return node;
-    }
-
-    return undefined;
-  }
+  const visit = findNodeByPosition_visit.bind(null, sourceFile, line, column);
 
   return visit(sourceFile);
+}
+
+function findNodeByPosition_visit(
+  sourceFile: ts.SourceFile,
+  line: number,
+  column: number,
+  node: ts.Node,
+): ts.Node | undefined {
+  const { line: startLine, character: startCol } = sourceFile.getLineAndCharacterOfPosition(
+    node.getStart(),
+  );
+  const { line: endLine, character: endCol } = sourceFile.getLineAndCharacterOfPosition(
+    node.getEnd(),
+  );
+
+  if (line >= startLine && line <= endLine) {
+    if (line === startLine && column < startCol) return undefined;
+    if (line === endLine && column > endCol) return undefined;
+
+    // Check children first for more specific match
+    for (const child of node.getChildren()) {
+      const result = findNodeByPosition_visit(sourceFile, line, column, child);
+      if (result) return result;
+    }
+
+    return node;
+  }
+
+  return undefined;
 }
 
 export function calculateCyclomaticComplexity(node: ts.Node): number {
@@ -96,25 +103,7 @@ export function isSideEffectCall(
 ): boolean {
   const expression = callExpression.expression;
 
-  function getCallPath(expr: ts.Expression): string {
-    if (ts.isIdentifier(expr)) {
-      return expr.text;
-    }
-    if (ts.isPropertyAccessExpression(expr)) {
-      const left = getCallPath(expr.expression);
-      return left ? `${left}.${expr.name.text}` : expr.name.text;
-    }
-    if (ts.isElementAccessExpression(expr)) {
-      const left = getCallPath(expr.expression);
-      const arg = expr.argumentExpression;
-      if (arg && ts.isStringLiteral(arg)) {
-        return left ? `${left}.${arg.text}` : arg.text;
-      }
-      // Unknown dynamic key: fall back to left only to allow prefix matches like "analytics.*"
-      return left;
-    }
-    return '';
-  }
+  const getCallPath = isSideEffectCall_getCallPath.bind(null);
 
   const callPath = getCallPath(expression);
   if (!callPath) return false;
@@ -127,6 +116,26 @@ export function isSideEffectCall(
   return sideEffectCallees.some((pattern) =>
     minimatch(callPath, pattern, { dot: true, nocase: false }),
   );
+}
+
+function isSideEffectCall_getCallPath(expr: ts.Expression): string {
+  if (ts.isIdentifier(expr)) {
+    return expr.text;
+  }
+  if (ts.isPropertyAccessExpression(expr)) {
+    const left = isSideEffectCall_getCallPath(expr.expression);
+    return left ? `${left}.${expr.name.text}` : expr.name.text;
+  }
+  if (ts.isElementAccessExpression(expr)) {
+    const left = isSideEffectCall_getCallPath(expr.expression);
+    const arg = expr.argumentExpression;
+    if (arg && ts.isStringLiteral(arg)) {
+      return left ? `${left}.${arg.text}` : arg.text;
+    }
+    // Unknown dynamic key: fall back to left only to allow prefix matches like "analytics.*"
+    return left;
+  }
+  return '';
 }
 
 export function getParameterSignature(parameter: ts.ParameterDeclaration): {
