@@ -1,4 +1,4 @@
-import * as ts from 'typescript';
+import ts from 'typescript';
 import { minimatch } from 'minimatch';
 
 export function getNodeText(node: ts.Node, sourceFile: ts.SourceFile): string {
@@ -203,4 +203,29 @@ export function getVisibilityModifier(node: ts.ClassElement): 'public' | 'privat
     }
   }
   return 'public'; // Default visibility
+}
+
+export function levenshtein(a: string, b: string): number {
+  const an = a.length;
+  const bn = b.length;
+  if (an === 0) return bn;
+  if (bn === 0) return an;
+  const matrix = Array.from({ length: bn + 1 }, (_, i) => [i]);
+  for (let j = 1; j <= an; j++) {
+    if (!matrix[0]) matrix[0] = [];
+    matrix[0][j] = j;
+  }
+
+  for (let i = 1; i <= bn; i++) {
+    for (let j = 1; j <= an; j++) {
+      const cost = a[j - 1] === b[i - 1] ? 0 : 1;
+      if (!matrix[i]) matrix[i] = [];
+      matrix[i]![j] = Math.min(
+        matrix[i - 1]![j]! + 1, // deletion
+        matrix[i]![j - 1]! + 1, // insertion
+        matrix[i - 1]![j - 1]! + cost, // substitution
+      );
+    }
+  }
+  return matrix[bn]![an]!;
 }
