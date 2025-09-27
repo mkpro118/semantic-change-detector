@@ -6,21 +6,40 @@
 import type { AnalysisResult, SeverityLevel } from '../types/index.js';
 
 /**
- * Maps severity levels to GitHub Actions annotation types.
+ * GitHubActionsAnnotationType represents the three annotation severities
+ * supported by GitHub Actions workflow commands.
  */
-export type GitHubActionsAnnotationType = 'notice' | 'warning' | 'error';
+type GitHubActionsAnnotationType = 'notice' | 'warning' | 'error';
 
 /**
- * Represents a single GitHub Actions annotation.
+ * A single GitHub Actions annotation record used to surface analysis
+ * results in CI. This maps our change metadata to the workflow command
+ * format supported by the GitHub runner.
+ *
+ * Fields
+ * - type — notice | warning | error mapped from severity.
+ * - file — Path relative to repo root.
+ * - line/endLine — 1-indexed lines to annotate.
+ * - title — Short classification (e.g., change kind).
+ * - message — Detailed, human-readable explanation.
+ *
+ * @library-export
+ * @public
  */
-export interface GitHubActionsAnnotation {
+export type GitHubActionsAnnotation = {
+  /** notice | warning | error derived from severity. */
   type: GitHubActionsAnnotationType;
+  /** File path (relative to repo). */
   file: string;
+  /** 1-indexed line to annotate. */
   line: number;
+  /** Optional 1-indexed end line (range). */
   endLine?: number;
+  /** Short label for the annotation (e.g., change kind). */
   title: string;
+  /** Detailed, human-readable message body. */
   message: string;
-}
+};
 
 /**
  * Maps semantic change severity levels to GitHub Actions annotation types.

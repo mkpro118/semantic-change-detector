@@ -61,6 +61,15 @@ function parseCommandLineArgs(args: string[]): Partial<AnalysisOptions> {
 }
 
 /**
+ * Determines the default output format based on whether stdout is a TTY.
+ * @returns 'console' for terminal output, 'machine' for pipes/redirects
+ */
+function getDefaultOutputFormat(): 'console' | 'machine' {
+  // Check if stdout is a TTY (terminal)
+  return process.stdout.isTTY ? 'console' : 'machine';
+}
+
+/**
  * Validates the parsed options and sets default values.
  * Exits the process if required options are missing.
  * @param options The partial options object from parsing.
@@ -86,7 +95,7 @@ function validateOptions(
     baseRef: ensured.baseRef,
     headRef: ensured.headRef,
     files: ensured.files || [],
-    outputFormat: ensured.outputFormat || 'console',
+    outputFormat: ensured.outputFormat || getDefaultOutputFormat(),
     outputFile: ensured.outputFile,
     debug: ensured.debug || false,
     quiet: ensured.quiet || false,
@@ -115,7 +124,8 @@ INPUT OPTIONS (choose one):
   --stdin                  Read file paths from stdin (newline-separated)
 
 OUTPUT OPTIONS:
-  --output-format=<format> Output format: console (default), json, machine, github-actions
+  --output-format=<format> Output format: console, json, machine, github-actions
+                          (default: console for terminals, machine for pipes/redirects)
   --output-file=<path>     File path to write JSON output (for json/github-actions formats)
 
 GENERAL OPTIONS:
@@ -153,27 +163,29 @@ For more information, visit: https://github.com/mkpro118/semantic-change-detecto
  * @returns A promise that resolves with an array of file paths.
  */
 function readStdin(): Promise<string[]> {
-  return new Promise((resolve) => {
-    const stdin = process.stdin;
-    let data = '';
+  return new Promise(readStdin_inline.bind(null));
+}
 
-    stdin.setEncoding('utf8');
-    stdin.on('data', (chunk) => {
-      data += chunk.toString();
-    });
+function readStdin_inline(resolve: (value: string[] | PromiseLike<string[]>) => void): void {
+  const stdin = process.stdin;
+  let data = '';
 
-    stdin.on('end', () => {
-      const files = data
-        .split('\n')
-        .map((f) => f.trim())
-        .filter(Boolean);
-      resolve(files);
-    });
-
-    if (stdin.isTTY) {
-      resolve([]);
-    }
+  stdin.setEncoding('utf8');
+  stdin.on('data', (chunk) => {
+    data += chunk.toString();
   });
+
+  stdin.on('end', () => {
+    const files = data
+      .split('\n')
+      .map((f) => f.trim())
+      .filter(Boolean);
+    resolve(files);
+  });
+
+  if (stdin.isTTY) {
+    resolve([]);
+  }
 }
 
 /**
