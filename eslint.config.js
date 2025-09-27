@@ -30,6 +30,16 @@ export default tseslint.config(
     },
     rules: {
       'no-console': 'error',
+      'max-lines-per-function': [
+        'error',
+        {
+          max: 100,
+          skipBlankLines: true,
+          skipComments: true,
+          IIFEs: true,
+        },
+      ],
+      complexity: ['error', 25],
       '@typescript-eslint/consistent-type-imports': 'error',
       '@typescript-eslint/no-unused-vars': [
         'warn',
@@ -67,6 +77,8 @@ export default tseslint.config(
     rules: {
       // Bun test matchers sometimes surface as `any` in type-checker; relax unsafe checks in tests
       'no-console': 'off',
+      'max-lines-per-function': 'off',
+      complexity: 'off',
       '@typescript-eslint/no-explicit-any': 'off',
       '@typescript-eslint/no-unsafe-argument': 'off',
       '@typescript-eslint/no-unsafe-call': 'off',

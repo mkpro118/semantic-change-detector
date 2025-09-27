@@ -1,0 +1,14 @@
+{
+  "$schema": "https://unpkg.com/knip@latest/schema.json",
+  "entry": ["src/worker.ts"],
+  "ignore": [
+    "build/**",
+    "coverage/**",
+    "dist/**",
+    "node_modules/**",
+    "tests/**/*.ts",
+    "tests/**/*.tsx"
+  ],
+  "ignoreDependencies": ["bun-types"],
+  "tags": ["-@library-export", "-@public"]
+}

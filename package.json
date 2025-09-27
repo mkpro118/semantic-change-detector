@@ -13,15 +13,18 @@
     "node": ">=18.0.0"
   },
   "scripts": {
-    "analyze": "node ./dist/cli.js",
+    "analyze": "bun run dist/cli.js",
     "build": "tsc",
     "build:watch": "tsc --watch",
     "clean": "rm -rf dist",
+    "docs:semantic-kind": "bun run src/tools/generate-semantic-change-kind-docs.ts",
+    "docs:semantic-kind-check": "bun run src/tools/check-and-generate-semantic-change-kind-docs.ts",
+    "hooks:install": "git config core.hooksPath .githooks || true",
     "format": "prettier --log-level silent --write .",
     "format:check": "prettier --check .",
     "lint": "eslint .",
     "lint:fix": "eslint . --fix",
-    "prepublishOnly": "npm run build",
+    "prepublishOnly": "bun run build && bun run docs:semantic-kind",
     "test": "bun test",
     "test:integration": "bun test test/integration",
     "test:unit": "bun test test/unit",
@@ -58,8 +61,9 @@
     "README.md"
   ],
   "dependencies": {
-    "typescript": "^5.9.2",
-    "minimatch": "^9.0.0"
+    "eslint-plugin-local-rules": "^3.0.2",
+    "minimatch": "^9.0.0",
+    "typescript": "^5.9.2"
   },
   "devDependencies": {
     "@types/bun": "^1.2",

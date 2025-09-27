@@ -1,0 +1,14 @@
+repos:
+  - repo: local
+    hooks:
+      - id: semantic-change-kind-docs
+        name: Generate SemanticChangeKind docs (new variants only)
+        language: system
+        entry: bash
+        args:
+          - -lc
+          - |
+            bun run docs:semantic-kind-check
+        pass_filenames: false
+        files: ^src/types/semantic-change-kind\.ts$
+        stages: [commit, push]
