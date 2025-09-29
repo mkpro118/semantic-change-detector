@@ -2,361 +2,353 @@
 
 Advanced semantic change detection for TypeScript and React code with GitHub Actions integration.
 
-## Overview
+## What it does
 
-This package provides sophisticated analysis of semantic changes in TypeScript and React codebases, helping development teams automatically determine when code changes require additional test coverage. It goes beyond simple diff analysis by understanding the semantic meaning of code changes through AST (Abstract Syntax Tree) analysis.
+The semantic change detector analyzes your TypeScript and React code changes to automatically determine when you need to write tests. Unlike simple diff tools, it understands the **meaning** of your changes - distinguishing between cosmetic changes (like formatting) and semantic changes (like new function parameters or React hook dependencies).
 
-## Features
+Perfect for teams who want to:
+- **Automate test requirement decisions** in pull requests
+- **Focus testing efforts** on changes that actually matter
+- **Avoid over-testing** trivial changes like formatting or comments
+- **Ensure critical changes** like API modifications get proper test coverage
 
-### Pure Functional Architecture
+## Key Features
 
-- **Composable Functions**: Each analysis step is a pure function with clear inputs/outputs
-- **No Side Effects**: Predictable, testable functions that don't mutate state
-- **Modular Design**: Mix and match analysis functions as needed
-- **Tree-Shakable**: Import only the functions you need
+- **50+ semantic change types** including function signatures, React hooks, JSX logic, and more
+- **Smart severity classification** - distinguishes between critical, moderate, and trivial changes
+- **GitHub Actions integration** - automated PR comments and file annotations
+- **Highly configurable** - tune detection rules for your team's workflow
+- **Zero dependencies** - only TypeScript as peer dependency
 
-### Advanced Semantic Analysis
+## Quick Start
 
-- **50+ Change Types**: Detects function signatures, class structures, interfaces, React hooks, JSX logic, and more
-- **Severity Classification**: Categorizes changes as high, medium, or low severity based on impact
-- **Smart Pattern Recognition**: Distinguishes between trivial changes (formatting, comments) and meaningful changes (logic, API surface)
-
-### Performance Optimized
-
-- **Fast Analysis**: Sub-25ms analysis for typical components
-- **Memory Efficient**: Stable memory usage across large codebases
-- **Scalable**: Handles complex enterprise codebases
-- **Zero Dependencies**: Only TypeScript as peer dependency
-- **Concurrent Analysis**: Leverages worker threads to analyze multiple files in parallel, significantly speeding up analysis on multi-core systems.
-- **Early Exit for Unchanged Files**: Skips detailed analysis for files that have no detected git diffs, reducing overhead for small changes in large codebases.
-- **Worker Timeouts**: Individual file analysis tasks are aborted if they exceed a configurable timeout, preventing pathological files from stalling the entire process.
-
-### React & TypeScript Focused
-
-- **Hook Dependency Tracking**: Detects changes in React hook dependencies
-- **JSX Logic Detection**: Identifies conditional rendering and complex expressions
-- **Interface Evolution**: Tracks TypeScript interface and type changes
-- **Component Analysis**: Understands React component structure changes
-
-### GitHub Actions Integration
-
-- **PR Comments**: Automated analysis summaries on pull requests
-- **File Annotations**: Line-level change markers in PR diff view
-- **Test Requirements**: Automatic detection of changes requiring test coverage
-- **Check Runs**: Integration with GitHub's checks API
-
-## Installation
+### Basic CLI Usage
 
 ```bash
-bun add @mkpro118/semantic-change-detector
-# or use npm: npm install @mkpro118/semantic-change-detector
-```
-
-## Usage
-
-### Command Line Interface
-
-```bash
-# Basic usage with a comma-separated list of files
-bunx semantic-change-detector \
+# Analyze specific files
+npx semantic-change-detector \
   --base-ref=main \
   --head-ref=feature-branch \
   --files="src/component.tsx,src/utils.ts"
 
-# Pipe files from git diff using --stdin
-git diff --name-only main...feature-branch | bunx semantic-change-detector --stdin --base-ref=main --head-ref=feature-branch
+# Analyze all changed files from git diff
+git diff --name-only main...HEAD | npx semantic-change-detector \
+  --stdin \
+  --base-ref=main \
+  --head-ref=HEAD
 ```
 
-**CLI Options:**
+### Example Output
 
-- `--base-ref=<ref>`: (Required) The Git reference for the base version (e.g., `main`, `HEAD~1`, `commit-sha`).
-- `--head-ref=<ref>`: (Required) The Git reference for the head version (e.g., `feature-branch`, `HEAD`, `commit-sha`).
-- `--files=<paths>`: A comma-separated list of file paths to analyze. Not required if using `--stdin`.
-- `--stdin`: Reads file paths from stdin (newline-separated).
-- `--output-format=<format>`: (Optional) The format for the analysis output.
-  - `console` (default): Human-readable summary printed to the console.
-  - `json`: Full analysis result as JSON, written to `--output-file`.
-  - `machine`: Full analysis result as JSON, printed to stdout. Ideal for piping to other tools.
-  - `github-actions`: Formatted output for GitHub Actions, including PR comments and file annotations.
-- `--output-file=<path>`: (Optional) The file path to write JSON output to (for `json` and `github-actions` formats).
-- `--debug`: (Optional) Enables verbose debug logging for development and troubleshooting.
-- `--quiet`: (Optional) Suppresses all console output except for critical errors and exit codes.
-- `--timeout-ms=<milliseconds>`: (Optional) Sets a timeout for individual file analysis tasks. If a file takes longer than this, its analysis is aborted. Defaults to 120000ms (2 minutes).
+```
+Analysis Results:
+   Files analyzed: 3
+   Total changes: 8
+   High severity: 2
+   Medium severity: 4
+   Low severity: 2
+   Tests required: Yes
 
-### Programmatic Usage
+Top change types:
+   functionSignatureChanged: 1 (high)
+   hookDependencyChanged: 1 (high)
+   jsxPropsChanged: 3 (low)
+   importAdded: 3 (low)
+```
+
+## What Gets Detected
+
+The analyzer detects semantic changes across several categories. Here are some key examples:
+
+**High Severity (Require Tests)**
+- `functionSignatureChanged` - Function parameters or return types changed
+- `hookDependencyChanged` - React hook dependency arrays modified
+- `conditionalAdded` - New if statements or conditional logic
+- `exportRemoved` - Public API breaking changes
+
+**Medium Severity (May Require Tests)**
+- `hookAdded` - New React hooks introduced
+- `jsxLogicAdded` - New conditional rendering logic
+- `functionCallAdded` - New function calls (potential side effects)
+
+**Low Severity (Usually Safe)**
+- `importAdded` - New imports (unless side-effectful)
+- `jsxElementAdded` - New JSX elements
+- `variableDeclarationChanged` - Variable type or initialization changes
+
+For a complete reference of all 50+ change types, see [docs/semantic-change-kinds.md](docs/semantic-change-kinds.md).
+
+## CLI Reference
+
+### Required Options
+- `--base-ref=<ref>` - Git reference for the base version (e.g., `main`, `HEAD~1`)
+- `--head-ref=<ref>` - Git reference for the head version (e.g., `feature-branch`, `HEAD`)
+
+### Input Options (choose one)
+- `--files=<paths>` - Comma-separated list of file paths to analyze
+- `--stdin` - Read file paths from stdin (newline-separated)
+
+### Output Options
+- `--output-format=<format>` - Output format (default: auto-detected)
+  - `console` - Human-readable summary for terminals
+  - `json` - JSON output written to `--output-file`
+  - `machine` - JSON output to stdout (for piping)
+  - `github-actions` - GitHub Actions annotations and comments
+- `--output-file=<path>` - File path for JSON output (used with `json` format)
+
+### Control Options
+- `--debug` - Enable verbose debug logging
+- `--quiet` - Suppress all output except critical errors
+- `--timeout-ms=<ms>` - Timeout for individual file analysis (default: 120000)
+- `--config-path=<path>` - Path to configuration file (default: `.semantic-change-detector.json`)
+
+### Examples
+
+```bash
+# Basic analysis
+npx semantic-change-detector --base-ref=main --head-ref=HEAD --files="src/app.tsx"
+
+# Get JSON output
+npx semantic-change-detector \
+  --base-ref=main --head-ref=HEAD \
+  --files="src/app.tsx" \
+  --output-format=json \
+  --output-file=analysis.json
+
+# Pipe from git diff
+git diff --name-only main...HEAD | npx semantic-change-detector \
+  --stdin --base-ref=main --head-ref=HEAD
+
+# Analyze with custom config
+npx semantic-change-detector \
+  --base-ref=main --head-ref=HEAD \
+  --files="src/app.tsx" \
+  --config-path=.my-semantic-config.json
+```
+
+## Configuration
+
+The analyzer is highly configurable to match your team's needs. Create a `.semantic-change-detector.json` file in your project root:
+
+### Basic Configuration
+
+```json
+{
+  "include": ["**/*.ts", "**/*.tsx"],
+  "exclude": ["**/*.test.*", "node_modules/**"],
+  "testGlobs": ["**/*.test.*", "**/*.spec.*"],
+  "bypassLabels": ["skip-tests", "docs-only"]
+}
+```
+
+### Advanced Configuration
+
+```json
+{
+  "changeKindGroups": {
+    "enabled": ["core-structural", "react-hooks", "side-effects"],
+    "disabled": ["jsx-logic", "complexity"]
+  },
+  "severityOverrides": {
+    "importAdded": "medium",
+    "jsxElementAdded": "high"
+  },
+  "jsxConfig": {
+    "enabled": true,
+    "ignoreLogicChanges": true,
+    "treatAsLowSeverity": false
+  },
+  "testRequirements": {
+    "alwaysRequireTests": ["functionSignatureChanged"],
+    "neverRequireTests": ["jsxLogicAdded"],
+    "minimumSeverityForTests": "medium"
+  }
+}
+```
+
+For complete configuration documentation, see [CONFIGURATION.md](CONFIGURATION.md).
+
+## GitHub Actions Integration
+
+Add semantic analysis to your PR workflow:
+
+```yaml
+name: Semantic Change Analysis
+on:
+  pull_request:
+    types: [opened, synchronize, reopened]
+
+permissions:
+  contents: read
+  pull-requests: write
+
+jobs:
+  semantic-analysis:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          fetch-depth: 0
+
+      - name: Run semantic analysis
+        run: |
+          file_patterns=(
+            '*.js'
+            '*.jsx'
+            '*.ts'
+            '*.tsx'
+          )
+          base_ref="${{ github.event.pull_request.base.sha }}"
+          head_ref="${{ github.event.pull_request.head.sha }}"
+          git diff --name-only --relative $base_ref...$head_ref -- "${file_patterns[@]}" | \
+            npx semantic-change-detector \
+            --stdin \
+            --base-ref="$base_ref" \
+            --head-ref="$head_ref" \
+            --output-format=github-actions
+```
+
+This will automatically:
+- Add file annotations showing detected changes
+- Create PR comments with analysis summaries
+- Set check status based on whether tests are required
+- Provide recommendations for test coverage
+
+## Programmatic Usage
+
+### Installation
+
+```bash
+npm install @mkpro118/semantic-change-detector
+```
 
 ```typescript
-import {
-  analyzeSemanticChanges,
-  createSemanticContext,
-  runSemanticAnalysis,
-} from '@mkpro118/semantic-change-detector';
+import { runSemanticAnalysis } from '@mkpro118/semantic-change-detector';
 
-// Low-level functional API
-const config = {
-  include: ['**/*.ts', '**/*.tsx'],
-  exclude: ['**/*.test.*', 'node_modules/**'],
-  sideEffectCallees: ['console.*', 'fetch', '*.api.*'],
-  testGlobs: ['**/*.test.*'],
-  bypassLabels: ['skip-tests'],
-};
-
-const baseContext = createSemanticContext(baseSourceFile, config.sideEffectCallees);
-const headContext = createSemanticContext(headSourceFile, config.sideEffectCallees);
-
-const changes = analyzeSemanticChanges(
-  baseContext,
-  headContext,
-  diffHunks,
-  baseContent,
-  headContent,
-  config,
-);
-
-// High-level API for complete analysis
 const result = await runSemanticAnalysis({
   baseRef: 'main',
   headRef: 'feature-branch',
   files: ['src/component.tsx', 'src/utils.ts'],
   outputFormat: 'json',
 });
+
+console.log(`Found ${result.totalChanges} changes`);
+console.log(`Tests required: ${result.requiresTests}`);
+
+// Access individual changes
+result.changes.forEach(change => {
+  console.log(`${change.file}:${change.line} - ${change.kind} (${change.severity})`);
+});
 ```
-
-## GitHub Actions Setup
-
-Add this workflow to `.github/workflows/semantic-analysis.yml`:
-
-```yaml
-name: Semantic Change Analysis
-
-on:
-  pull_request:
-    types: [opened, synchronize, reopened]
-    paths:
-      - '**/*.ts'
-      - '**/*.tsx'
-      - '**/*.js'
-      - '**/*.jsx'
-
-env:
-  SEMANTIC_ANALYZER_PACKAGE: '@mkpro118/semantic-change-detector'
-
-permissions:
-  contents: read
-  pull-requests: write
-  checks: write
-
-jobs:
-  semantic-analysis:
-    name: Analyze Semantic Changes
-    runs-on: ubuntu-latest
-
-    steps:
-      - name: Checkout code
-        uses: actions/checkout@v4
-        with:
-          fetch-depth: 0
-
-      - name: Setup Bun
-        uses: oven-sh/setup-bun@v2
-        with:
-          bun-version: latest
-
-      - name: Install semantic analyzer
-        run: |
-          mkdir -p .github/scripts/semantic-analyzer
-          cd .github/scripts/semantic-analyzer
-          bun init -y
-          bun add ${{ env.SEMANTIC_ANALYZER_PACKAGE }}
-          # or use npm: npm init -y && npm install ${{ env.SEMANTIC_ANALYZER_PACKAGE }}
-
-      - name: Get changed files
-        id: changed-files
-        uses: tj-actions/changed-files@v41
-        with:
-          files: |
-            **/*.ts
-            **/*.tsx
-            **/*.js
-            **/*.jsx
-
-      - name: Run semantic analysis
-        if: steps.changed-files.outputs.any_changed == 'true'
-        run: |
-          cd .github/scripts/semantic-analyzer
-          echo "${{ steps.changed-files.outputs.all_changed_files }}" | bunx semantic-change-detector \
-            --stdin \
-            --base-ref=${{ github.event.pull_request.base.sha }} \
-            --head-ref=${{ github.event.pull_request.head.sha }} \
-            --output-format=github-actions
-```
-
-## Configuration
-
-The analyzer can be configured with the following options:
-
-```typescript
-interface AnalyzerConfig {
-  include: string[]; // File patterns to include
-  exclude: string[]; // File patterns to exclude
-  sideEffectCallees: string[]; // Function patterns that indicate side effects
-  testGlobs: string[]; // Test file patterns
-  bypassLabels: string[]; // PR labels that bypass analysis
-  timeoutMs?: number; // Analysis timeout for individual files (default: 120000ms)
-  maxMemoryMB?: number; // Memory limit (default: 512) - Note: Currently not enforced
-}
-```
-
-## Change Types Detected
-
-### High Severity (Require Tests)
-
-- Function signature changes
-- Class structure modifications
-- Export additions/removals
-- React hook dependency changes
-- Side effect call additions
-- Control flow changes (conditionals, loops)
-
-### Medium Severity (May Require Tests)
-
-- Interface property additions
-- Hook additions
-- JSX logic additions
-- Type definition changes
-- Import structure changes
-
-### Low Severity (Usually Safe)
-
-- Import additions
-- Type alias additions
-- Variable declarations
-- Formatting changes
 
 ## Output Formats
 
-### Console Output
+### Console Format (Default)
+Human-readable summary suitable for local development:
 
 ```
 Analysis Results:
-   Files analyzed: 3
-   Total changes: 15
-   High severity: 5
-   Medium severity: 7
+   Files analyzed: 2
+   Total changes: 6
+   High severity: 1
+   Medium severity: 2
    Low severity: 3
    Tests required: Yes
 
 Top change types:
-   functionSignatureChanged: 3 (high)
-   hookAdded: 2 (medium)
-   importAdded: 4 (low)
+   functionSignatureChanged: 1 (high)
+   hookAdded: 1 (medium)
+   importAdded: 2 (low)
 ```
 
-### JSON Output
+### JSON Format
+Structured output for tooling integration:
 
 ```json
 {
   "requiresTests": true,
-  "summary": "15 semantic changes detected, 5 high-severity, 7 medium-severity, 3 low-severity, Tests required",
-  "filesAnalyzed": 3,
-  "totalChanges": 15,
+  "summary": "6 semantic changes detected, 1 high-severity, 2 medium-severity, 3 low-severity, Tests required",
+  "filesAnalyzed": 2,
+  "totalChanges": 6,
   "severityBreakdown": {
-    "high": 5,
-    "medium": 7,
+    "high": 1,
+    "medium": 2,
     "low": 3
   },
-  "topChangeTypes": [
+  "changes": [
     {
+      "file": "src/utils.ts",
+      "line": 42,
+      "column": 0,
       "kind": "functionSignatureChanged",
-      "count": 3,
-      "maxSeverity": "high"
+      "severity": "high",
+      "detail": "Function signature changed: add parameter count changed from 2 to 3"
     }
-  ],
-  "changes": [...]
+  ]
 }
 ```
 
-### Machine Output
+### GitHub Actions Format
+Generates GitHub Actions workflow commands:
+
+```
+::error file=src/utils.ts,line=42,title=functionSignatureChanged::Function signature changed: add parameter count changed from 2 to 3
+::warning file=src/hooks.ts,line=15,title=hookAdded::React hook added: useCallback
+::notice file=src/types.ts,line=8,title=importAdded::Import added: lodash
+```
+
+## Common Use Cases
+
+### Strict Dependency Tracking
+Flag all new imports as requiring review:
 
 ```json
 {
-  "requiresTests": true,
-  "summary": "15 semantic changes detected, 5 high-severity, 7 medium-severity, 3 low-severity, Tests required",
-  "filesAnalyzed": 3,
-  "totalChanges": 15,
-  "severityBreakdown": {
-    "high": 5,
-    "medium": 7,
-    "low": 3
+  "severityOverrides": {
+    "importAdded": "high"
   },
-  "topChangeTypes": [
-    {
-      "kind": "functionSignatureChanged",
-      "count": 3,
-      "maxSeverity": "high"
-    }
-  ],
-  "changes": [...]
+  "testRequirements": {
+    "alwaysRequireTests": ["importAdded"]
   }
+}
 ```
 
-(Note: Machine output is identical to JSON output, but printed to stdout instead of a file.)
+### UI-Heavy Projects
+Treat JSX changes as low priority:
 
-### GitHub Actions Output
-
-Automatically creates:
-
-- PR comment summaries
-- File annotations on changed lines
-- Check runs with pass/fail status
-- Test requirement recommendations
-
-## Real-World Performance
-
-Based on extensive testing across diverse codebases:
-
-- **95% Pattern Accuracy** across TypeScript/React projects
-- **1-23ms Analysis Time** for typical components
-- **Smart Event Handler Detection** (ignores trivial inline handlers)
-- **Efficient Change Grouping** for large utility files
-
-## Example Analysis Results
-
-### React Component Enhancement
-
-```
-UserProfile.tsx -> UserProfile-modified.tsx
-Found 160 changes (53 high, 75 medium, 32 low)
-Detected: Hook additions, side effect calls, JSX logic
-Performance: 23ms analysis time
+```json
+{
+  "jsxConfig": {
+    "treatAsLowSeverity": true,
+    "ignoreLogicChanges": true
+  },
+  "changeKindGroups": {
+    "disabled": ["jsx-logic"]
+  }
+}
 ```
 
-### Utility Library Changes
+### Performance-Focused
+Skip expensive analysis for large codebases:
 
+```json
+{
+  "performance": {
+    "skipDisabledAnalyzers": true,
+    "enableEarlyExit": true
+  },
+  "changeKindGroups": {
+    "disabled": ["complexity", "type-system"]
+  }
+}
 ```
-dataUtils.ts -> dataUtils-modified.ts
-Found 174 changes (67 high, 89 medium, 18 low)
-Detected: Function signatures, class methods, crypto imports
-Performance: 14ms analysis time
-```
-
-## Contributing
-
-1. Clone the repository
-2. Install dependencies: `bun install`
-3. Run tests: `bun test`
-4. Build: `bun run build`
-
-## License
-
-MIT License - see [LICENSE](LICENSE) file for details.
 
 ## Support
 
 - [Report Issues](https://github.com/mkpro118/semantic-change-detector/issues)
-- [Documentation](https://github.com/mkpro118/semantic-change-detector#readme)
-- [Discussions](https://github.com/mkpro118/semantic-change-detector/discussions)
+- [Configuration Guide](CONFIGURATION.md)
+- [Change Types Reference](docs/semantic-change-kinds.md)
 
----
+## License
 
-**Recommendation**: **Production Ready** - Deploy with confidence for automated test requirement analysis in modern development workflows.
+MIT License - see [LICENSE](LICENSE) file for details.
