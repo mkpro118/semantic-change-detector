@@ -7,6 +7,7 @@ Advanced semantic change detection for TypeScript and React code with GitHub Act
 The semantic change detector analyzes your TypeScript and React code changes to automatically determine when you need to write tests. Unlike simple diff tools, it understands the **meaning** of your changes - distinguishing between cosmetic changes (like formatting) and semantic changes (like new function parameters or React hook dependencies).
 
 Perfect for teams who want to:
+
 - **Automate test requirement decisions** in pull requests
 - **Focus testing efforts** on changes that actually matter
 - **Avoid over-testing** trivial changes like formatting or comments
@@ -61,17 +62,20 @@ Top change types:
 The analyzer detects semantic changes across several categories. Here are some key examples:
 
 **High Severity (Require Tests)**
+
 - `functionSignatureChanged` - Function parameters or return types changed
 - `hookDependencyChanged` - React hook dependency arrays modified
 - `conditionalAdded` - New if statements or conditional logic
 - `exportRemoved` - Public API breaking changes
 
 **Medium Severity (May Require Tests)**
+
 - `hookAdded` - New React hooks introduced
 - `jsxLogicAdded` - New conditional rendering logic
 - `functionCallAdded` - New function calls (potential side effects)
 
 **Low Severity (Usually Safe)**
+
 - `importAdded` - New imports (unless side-effectful)
 - `jsxElementAdded` - New JSX elements
 - `variableDeclarationChanged` - Variable type or initialization changes
@@ -81,14 +85,17 @@ For a complete reference of all 50+ change types, see [docs/semantic-change-kind
 ## CLI Reference
 
 ### Required Options
+
 - `--base-ref=<ref>` - Git reference for the base version (e.g., `main`, `HEAD~1`)
 - `--head-ref=<ref>` - Git reference for the head version (e.g., `feature-branch`, `HEAD`)
 
 ### Input Options (choose one)
+
 - `--files=<paths>` - Comma-separated list of file paths to analyze
 - `--stdin` - Read file paths from stdin (newline-separated)
 
 ### Output Options
+
 - `--output-format=<format>` - Output format (default: auto-detected)
   - `console` - Human-readable summary for terminals
   - `json` - JSON output written to `--output-file`
@@ -97,6 +104,7 @@ For a complete reference of all 50+ change types, see [docs/semantic-change-kind
 - `--output-file=<path>` - File path for JSON output (used with `json` format)
 
 ### Control Options
+
 - `--debug` - Enable verbose debug logging
 - `--quiet` - Suppress all output except critical errors
 - `--timeout-ms=<ms>` - Timeout for individual file analysis (default: 120000)
@@ -209,6 +217,7 @@ jobs:
 ```
 
 This will automatically:
+
 - Add file annotations showing detected changes
 - Create PR comments with analysis summaries
 - Set check status based on whether tests are required
@@ -236,7 +245,7 @@ console.log(`Found ${result.totalChanges} changes`);
 console.log(`Tests required: ${result.requiresTests}`);
 
 // Access individual changes
-result.changes.forEach(change => {
+result.changes.forEach((change) => {
   console.log(`${change.file}:${change.line} - ${change.kind} (${change.severity})`);
 });
 ```
@@ -244,6 +253,7 @@ result.changes.forEach(change => {
 ## Output Formats
 
 ### Console Format (Default)
+
 Human-readable summary suitable for local development:
 
 ```
@@ -262,6 +272,7 @@ Top change types:
 ```
 
 ### JSON Format
+
 Structured output for tooling integration:
 
 ```json
@@ -289,6 +300,7 @@ Structured output for tooling integration:
 ```
 
 ### GitHub Actions Format
+
 Generates GitHub Actions workflow commands:
 
 ```
@@ -300,6 +312,7 @@ Generates GitHub Actions workflow commands:
 ## Common Use Cases
 
 ### Strict Dependency Tracking
+
 Flag all new imports as requiring review:
 
 ```json
@@ -314,6 +327,7 @@ Flag all new imports as requiring review:
 ```
 
 ### UI-Heavy Projects
+
 Treat JSX changes as low priority:
 
 ```json
@@ -329,6 +343,7 @@ Treat JSX changes as low priority:
 ```
 
 ### Performance-Focused
+
 Skip expensive analysis for large codebases:
 
 ```json
@@ -347,7 +362,7 @@ Skip expensive analysis for large codebases:
 
 - [Report Issues](https://github.com/mkpro118/semantic-change-detector/issues)
 - [Configuration Guide](CONFIGURATION.md)
-- [Change Types Reference](docs/semantic-change-kinds.md)
+- [Change Types Reference](docs/semantic-change-kind.md)
 
 ## License
 

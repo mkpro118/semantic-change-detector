@@ -1,6 +1,6 @@
 {
   "name": "@mkpro118/semantic-change-detector",
-  "version": "2.0.0",
+  "version": "2.0.2",
   "description": "Semantic change detection for TypeScript and TSX code with GitHub Actions integration",
   "main": "./dist/index.js",
   "module": "./dist/index.js",
