@@ -91,8 +91,8 @@ export function renderMarkdown(entries: ChangeKindEntry[]): string {
   const sections = sorted
     .map((e) => {
       const desc = e.description.length > 0 ? `\n\n${e.description}\n` : '';
-      const sourceLink = `/${SOURCE_RELATIVE_PATH}#L${e.line}`;
-      return `## ${e.name}\n\n- Tag: \`${e.tag}\`\n- Source: [${sourceLink}](${sourceLink})${desc}`;
+      const sourceLink = `${SOURCE_RELATIVE_PATH}#L${e.line}`;
+      return `## ${e.name}\n\n- Tag: \`${e.tag}\`\n- Source: [${sourceLink}](/${sourceLink})${desc}`;
     })
     .join('\n');
   const footer = `\n---\n\nMeta\n\n- Total kinds: ${sorted.length}\n- Generated on: ${now}\n- Generator: \`src/tools/generate-semantic-change-kind-docs.ts\``;

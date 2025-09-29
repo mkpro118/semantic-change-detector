@@ -1,6 +1,6 @@
 {
   "name": "@mkpro118/semantic-change-detector",
-  "version": "2.0.2",
+  "version": "2.0.3",
   "description": "Semantic change detection for TypeScript and TSX code with GitHub Actions integration",
   "main": "./dist/index.js",
   "module": "./dist/index.js",
@@ -24,7 +24,7 @@
     "format:check": "prettier --check .",
     "lint": "eslint .",
     "lint:fix": "eslint . --fix",
-    "prepublishOnly": "bun run build && bun run docs:semantic-kind",
+    "prepublishOnly": "bun run build",
     "test": "bun test",
     "test:integration": "bun test test/integration",
     "test:unit": "bun test test/unit",
