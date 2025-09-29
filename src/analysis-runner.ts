@@ -12,15 +12,14 @@ import * as process from 'process'; // Added for process.cwd()
 import ts from 'typescript';
 import { fileURLToPath } from 'url';
 import { detectSemanticChanges } from './analyzers/index.js';
+import {
+  DEFAULT_CONFIG,
+  shouldRequireTestsForChange,
+  type AnalyzerConfig,
+} from './types/config.js';
 import { createSemanticContext } from './context/semantic-context-builder.js';
 import { formatForGitHubActions } from './formatters/github-actions.js';
-import type {
-  AnalysisResult,
-  AnalyzerConfig,
-  DiffHunk,
-  SemanticChangeType,
-  SeverityLevel,
-} from './types/index.js';
+import type { AnalysisResult, DiffHunk, SemanticChangeType, SeverityLevel } from './types/index.js';
 import { mapConcurrent } from './utils/concurrency.js';
 import { logger } from './utils/logger.js';
 
@@ -401,30 +400,6 @@ export type AnalysisOptions = {
 };
 
 /**
- * The default configuration for the semantic analyzer.
- * This is used when no custom config is provided.
- */
-const DEFAULT_CONFIG: AnalyzerConfig = {
-  include: ['**/*.ts', '**/*.tsx', '**/*.js', '**/*.jsx'],
-  exclude: ['node_modules/**', '**/*.test.*', '**/*.spec.*', '**/*.d.ts', 'dist/**', 'build/**'],
-  sideEffectCallees: [
-    'console.*',
-    'fetch',
-    '*.api.*',
-    '*.service.*',
-    'track*',
-    'log*',
-    'analytics.*',
-    'gtag',
-    'dataLayer.*',
-  ],
-  sideEffectModules: [],
-  testGlobs: ['**/*.test.*', '**/*.spec.*'],
-  bypassLabels: ['skip-tests', 'docs-only', 'trivial'],
-  timeoutMs: 120000,
-};
-
-/**
  * The main function to run the semantic analysis process.
  * It coordinates file filtering, concurrent analysis, and result processing.
  * @param options The analysis options parsed from the command line.
@@ -520,10 +495,16 @@ export async function runSemanticAnalysis(options: AnalysisOptions): Promise<Ana
   logger.verbose(`Analysis completed in ${analysisTime}ms`);
   logger.verbose(`Total changes found: ${allChanges.length}`);
 
-  const result = processAnalysisResults(allChanges, filesAnalyzed, failedFiles, {
-    analysisTimeMs: analysisTime,
-    memoryUsageMB: finalMemory - initialMemory,
-  });
+  const result = processAnalysisResults(
+    allChanges,
+    filesAnalyzed,
+    failedFiles,
+    {
+      analysisTimeMs: analysisTime,
+      memoryUsageMB: finalMemory - initialMemory,
+    },
+    effectiveConfig,
+  );
 
   await outputResults(result, options);
 
@@ -559,6 +540,7 @@ function processAnalysisResults(
   filesAnalyzed: number,
   failedFiles: Array<{ filePath: string; error: string }>,
   performance: { analysisTimeMs: number; memoryUsageMB: number },
+  config: AnalyzerConfig,
 ): AnalysisResult {
   const severityBreakdown: AnalysisResult['severityBreakdown'] = {
     high: changes.filter((c) => c.severity === 'high').length,
@@ -587,7 +569,7 @@ function processAnalysisResults(
     .map(([kind, data]) => ({ kind, count: data.count, maxSeverity: data.maxSeverity }))
     .sort((a, b) => b.count - a.count);
 
-  const requiresTests = shouldRequireTests(changes);
+  const requiresTests = shouldRequireTests(changes, config);
 
   const criticalChanges = changes.filter((change) => change.severity === 'high').slice(0, 20);
 
@@ -619,26 +601,14 @@ function processAnalysisResults(
 /**
  * Determines if tests should be required based on the detected changes.
  * @param changes The list of detected semantic changes.
+ * @param config The analyzer configuration.
  * @returns True if tests are required, false otherwise.
  */
-function shouldRequireTests(changes: AnalyzedChange[]): boolean {
-  const highSeverityChanges = changes.filter((c) => c.severity === 'high');
-  if (highSeverityChanges.length === 0) {
-    return false;
-  }
-
-  const testRequiringPatterns = [
-    'functionSignatureChanged',
-    'functionRemoved',
-    'exportRemoved',
-    'exportAdded', // Added to require tests for new exports
-    'exportSignatureChanged',
-    'hookDependencyChanged',
-    'functionCallAdded',
-    'classStructureChanged',
-  ];
-
-  return highSeverityChanges.some((change) => testRequiringPatterns.includes(change.kind));
+function shouldRequireTests(changes: AnalyzedChange[], config: AnalyzerConfig): boolean {
+  // Check if any changes require tests based on configuration
+  return changes.some((change) =>
+    shouldRequireTestsForChange(change.kind, change.severity, config),
+  );
 }
 
 /**
@@ -837,16 +807,7 @@ function loadConfig(options: AnalysisOptions): AnalyzerConfig {
   if (fs.existsSync(configPath)) {
     try {
       const configContent = fs.readFileSync(configPath, 'utf8');
-      const parsed = JSON.parse(configContent) as {
-        include?: string[];
-        exclude?: string[];
-        sideEffectCallees?: string[];
-        sideEffectModules?: string[];
-        testGlobs?: string[];
-        bypassLabels?: string[];
-        timeoutMs?: number;
-        maxMemoryMB?: number;
-      };
+      const parsed = JSON.parse(configContent) as Partial<AnalyzerConfig>;
       loadedConfig = parsed;
       logger.verbose(`Loaded configuration from ${configPath}`);
     } catch (error) {
@@ -858,5 +819,31 @@ function loadConfig(options: AnalysisOptions): AnalyzerConfig {
     logger.verbose(`No custom configuration file found at ${configPath}. Using default settings.`);
   }
 
-  return { ...DEFAULT_CONFIG, ...loadedConfig };
+  // Merge with defaults, ensuring deep merge for nested objects
+  const mergedConfig: AnalyzerConfig = {
+    ...DEFAULT_CONFIG,
+    ...loadedConfig,
+    changeKindGroups: {
+      ...DEFAULT_CONFIG.changeKindGroups,
+      ...loadedConfig.changeKindGroups,
+    },
+    severityOverrides: {
+      ...DEFAULT_CONFIG.severityOverrides,
+      ...loadedConfig.severityOverrides,
+    },
+    jsxConfig: {
+      ...DEFAULT_CONFIG.jsxConfig,
+      ...loadedConfig.jsxConfig,
+    },
+    performance: {
+      ...DEFAULT_CONFIG.performance,
+      ...loadedConfig.performance,
+    },
+    testRequirements: {
+      ...DEFAULT_CONFIG.testRequirements,
+      ...loadedConfig.testRequirements,
+    },
+  };
+
+  return mergedConfig;
 }

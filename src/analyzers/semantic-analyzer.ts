@@ -1,4 +1,6 @@
-import type { AnalyzerConfig, DiffHunk, SemanticChange, SemanticContext } from '../types/index.js';
+import type { DiffHunk, SemanticChange, SemanticContext } from '../types/index.js';
+import type { AnalyzerConfig, ChangeKindGroup } from '../types/config.js';
+import { isChangeKindEnabled, getEffectiveSeverity } from '../types/config.js';
 import { analyzeClasses } from './class-analyzer.js';
 import { analyzeComparisonOperators } from './comparison-operator-analyzer.js';
 import { analyzeComplexity } from './complexity-analyzer.js';
@@ -31,7 +33,7 @@ import { analyzeVariableAssignments } from './variable-assignment-analyzer.js';
  * @param baseContext - Semantic context from the base version
  * @param headContext - Semantic context from the head version
  * @param diffHunks - Git diff hunks (currently unused but kept for future enhancement)
- * @param _config - Analysis configuration
+ * @param config - Analysis configuration
  * @returns Array of detected semantic changes
  */
 export function analyzeSemanticChanges(
@@ -74,6 +76,179 @@ export function analyzeSemanticChanges(
   // Scope to diff hunks to reduce noise
   const scoped = scopeChangesToHunks(deduplicateChanges(changes), diffHunks);
   return scoped;
+}
+
+/**
+ * Analyzer that supports selective analysis based on configuration.
+ *
+ * @param baseContext - Semantic context from the base version
+ * @param headContext - Semantic context from the head version
+ * @param diffHunks - Git diff hunks
+ * @param config - Analysis configuration
+ * @returns Array of detected semantic changes with applied severity overrides
+ */
+export function analyzeSemanticChangesWithConfig(
+  baseContext: SemanticContext,
+  headContext: SemanticContext,
+  diffHunks: DiffHunk[],
+  config: AnalyzerConfig,
+): SemanticChange[] {
+  const changes: SemanticChange[] = [];
+
+  // Map analyzers to their corresponding change kind groups for selective execution
+  const analyzerGroups = {
+    'data-flow': () => [
+      ...analyzeArrayMutations(baseContext, headContext),
+      ...analyzeObjectMutations(baseContext, headContext),
+      ...analyzeDestructuring(baseContext, headContext),
+      ...analyzeVariables(baseContext, headContext),
+      ...analyzeVariableAssignments(baseContext, headContext),
+    ],
+    'core-structural': () => [
+      ...analyzeClasses(baseContext, headContext),
+      ...analyzeExports(baseContext, headContext),
+      ...analyzeFunctions(baseContext, headContext),
+      ...analyzeInterfaces(baseContext, headContext),
+    ],
+    'control-flow': () => [
+      ...analyzeComparisonOperators(baseContext, headContext),
+      ...analyzeConditionals(baseContext, headContext),
+      ...analyzeLogicalOperators(baseContext, headContext),
+      ...analyzeLoops(baseContext, headContext),
+      ...analyzeTernaryExpressions(baseContext, headContext),
+    ],
+    'react-hooks': () => [...analyzeReactHooks(baseContext, headContext)],
+    'jsx-rendering': () => {
+      if (!config.jsxConfig.enabled) return [];
+      const jsxChanges = analyzeJSXChanges(baseContext, headContext);
+
+      // Filter out logic changes if configured
+      if (config.jsxConfig.ignoreLogicChanges) {
+        return jsxChanges.filter(
+          (change) => !['jsxLogicAdded', 'eventHandlerChanged'].includes(change.kind),
+        );
+      }
+      return jsxChanges;
+    },
+    'jsx-logic': () => {
+      if (!config.jsxConfig.enabled || config.jsxConfig.ignoreLogicChanges) return [];
+      const jsxChanges = analyzeJSXChanges(baseContext, headContext);
+      return jsxChanges.filter((change) =>
+        ['jsxLogicAdded', 'eventHandlerChanged'].includes(change.kind),
+      );
+    },
+    'imports-exports': () => [...analyzeImports(baseContext, headContext, config)],
+    'async-patterns': () => [
+      ...analyzePromiseUsage(baseContext, headContext),
+      // Note: async/await and effects would be analyzed by function analyzer
+    ],
+    'type-system': () => [...analyzeTypes(baseContext, headContext)],
+    'side-effects': () => [
+      ...analyzeFunctionCalls(baseContext, headContext),
+      ...analyzeSideEffects(baseContext, headContext),
+    ],
+    complexity: () => [
+      ...analyzeComplexity(baseContext, headContext),
+      ...analyzeSpreadOperators(baseContext, headContext),
+    ],
+    'error-handling': () => [
+      ...analyzeThrowStatements(baseContext, headContext),
+      ...analyzeTryCatch(baseContext, headContext),
+    ],
+  };
+
+  // State management analyzer - not in core groups, always run if enabled
+  if (isGroupEnabled('react-hooks', config) || isGroupEnabled('side-effects', config)) {
+    changes.push(...analyzeStateManagement(baseContext, headContext));
+  }
+
+  // Run analyzers based on configuration
+  for (const [groupName, analyzerFn] of Object.entries(analyzerGroups)) {
+    const group = groupName as ChangeKindGroup;
+
+    if (config.performance.skipDisabledAnalyzers && !isGroupEnabled(group, config)) {
+      // Skip analysis entirely for performance
+      continue;
+    }
+
+    const groupChanges = analyzerFn();
+
+    if (config.performance.skipDisabledAnalyzers || isGroupEnabled(group, config)) {
+      changes.push(...groupChanges);
+    }
+  }
+
+  // Apply configuration filters and transformations
+  const filteredChanges = applyConfigurationFilters(changes, config);
+
+  // Apply severity overrides
+  const changesWithSeverity = applySeverityOverrides(filteredChanges, config);
+
+  // Scope to diff hunks to reduce noise
+  const scoped = scopeChangesToHunks(deduplicateChanges(changesWithSeverity), diffHunks);
+  return scoped;
+}
+
+/**
+ * Checks if a change kind group is enabled in the configuration.
+ */
+function isGroupEnabled(groupName: ChangeKindGroup, config: AnalyzerConfig): boolean {
+  // Check if explicitly disabled
+  if (config.changeKindGroups.disabled.includes(groupName)) {
+    return false;
+  }
+
+  // Check if in enabled list (if enabled list is not empty, use as allowlist)
+  if (config.changeKindGroups.enabled.length > 0) {
+    return config.changeKindGroups.enabled.includes(groupName);
+  }
+
+  return true;
+}
+
+/**
+ * Applies configuration filters to remove unwanted changes.
+ */
+function applyConfigurationFilters(
+  changes: SemanticChange[],
+  config: AnalyzerConfig,
+): SemanticChange[] {
+  return changes.filter((change) => {
+    // Check if change kind is specifically disabled
+    if (config.disabledChangeKinds.includes(change.kind)) {
+      return false;
+    }
+
+    // Check if change kind is enabled based on group settings
+    if (!isChangeKindEnabled(change.kind, config)) {
+      return false;
+    }
+
+    return true;
+  });
+}
+
+/**
+ * Applies severity overrides from configuration to changes.
+ */
+function applySeverityOverrides(
+  changes: SemanticChange[],
+  config: AnalyzerConfig,
+): SemanticChange[] {
+  return changes.map((change) => {
+    const effectiveSeverity = getEffectiveSeverity(change.kind, config);
+
+    // Apply JSX-specific severity rules
+    if (
+      config.jsxConfig.treatAsLowSeverity &&
+      (change.kind.includes('jsx') || change.kind.includes('component'))
+    ) {
+      return { ...change, severity: 'low' };
+    }
+
+    // Return change with effective severity
+    return { ...change, severity: effectiveSeverity };
+  });
 }
 
 /**

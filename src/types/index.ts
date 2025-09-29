@@ -296,37 +296,8 @@ export type SemanticContext = {
   }>;
 };
 
-/**
- * Configuration for the analyzer.
- *
- * - include/exclude — Glob patterns controlling files to analyze.
- * - sideEffectCallees — Callee patterns considered side-effectful
- *   (e.g., console.*, analytics.*). Supports wildcards.
- * - testGlobs — Test file patterns used to cross-reference imports.
- * - bypassLabels — Labels indicating that tests are not required.
- * - timeoutMs — Optional per-file timeout.
- * - maxMemoryMB — Optional soft cap for process memory.
- *
- * @library-export
- */
-export type AnalyzerConfig = {
-  /** Glob patterns to include in analysis. */
-  include: string[];
-  /** Glob patterns to exclude from analysis. */
-  exclude: string[];
-  /** Patterns of callees considered side-effectful. */
-  sideEffectCallees: string[];
-  /** Glob patterns for modules considered to have side effects. */
-  sideEffectModules?: string[];
-  /** Glob patterns matching test files. */
-  testGlobs: string[];
-  /** Labels that permit skipping tests. */
-  bypassLabels: string[];
-  /** Optional per-file timeout in milliseconds. */
-  timeoutMs?: number;
-  /** Optional soft memory cap in MB. */
-  maxMemoryMB?: number;
-};
+// AnalyzerConfig is now exported from ./config.js
+export type { AnalyzerConfig } from './config.js';
 
 /**
  * The aggregated result for a multi-file analysis.

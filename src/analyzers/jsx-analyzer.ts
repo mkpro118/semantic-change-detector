@@ -511,28 +511,16 @@ function analyzeJSXChanges_takeByTag(
   return element;
 }
 
-export function analyzeJSXChanges(
-  baseContext: SemanticContext,
-  headContext: SemanticContext,
+/**
+ * Analyzes JSX element changes between base and head contexts.
+ */
+function analyzeJSXElementChanges(
+  baseJSX: JSXAnalysisResult,
+  headJSX: JSXAnalysisResult,
+  baseByLocation: Map<string, (typeof baseJSX.elements)[number]>,
+  baseLocationKeysByTag: Map<string, string[]>,
 ): SemanticChange[] {
   const changes: SemanticChange[] = [];
-
-  const baseJSX = analyzeJSX(baseContext.sourceFile);
-  const headJSX = analyzeJSX(headContext.sourceFile);
-
-  const baseByLocation = new Map<string, (typeof baseJSX.elements)[number]>();
-  const baseLocationKeysByTag = new Map<string, string[]>();
-
-  const registerBaseElement = analyzeJSXChanges_registerBaseElement.bind(
-    null,
-    baseJSX,
-    baseByLocation,
-    baseLocationKeysByTag,
-  );
-
-  for (const element of baseJSX.elements) {
-    registerBaseElement(element);
-  }
 
   const removeByLocation = analyzeJSXChanges_removeByLocation.bind(
     null,
@@ -598,6 +586,7 @@ export function analyzeJSXChanges(
     });
   }
 
+  // Check for removed elements
   for (const baseElement of baseByLocation.values()) {
     if (baseElement.isComponent) continue;
 
@@ -611,7 +600,18 @@ export function analyzeJSXChanges(
     });
   }
 
-  // Analyze conditional rendering
+  return changes;
+}
+
+/**
+ * Analyzes conditional rendering changes.
+ */
+function analyzeConditionalRenderingChanges(
+  baseJSX: JSXAnalysisResult,
+  headJSX: JSXAnalysisResult,
+): SemanticChange[] {
+  const changes: SemanticChange[] = [];
+
   for (const conditional of headJSX.conditionalRendering) {
     const baseConditional = baseJSX.conditionalRendering.find(
       (c) => Math.abs(c.line - conditional.line) <= 1,
@@ -628,7 +628,18 @@ export function analyzeJSXChanges(
     }
   }
 
-  // Analyze event handlers (only non-trivial ones)
+  return changes;
+}
+
+/**
+ * Analyzes event handler changes (only non-trivial ones).
+ */
+function analyzeEventHandlerChanges(
+  baseJSX: JSXAnalysisResult,
+  headJSX: JSXAnalysisResult,
+): SemanticChange[] {
+  const changes: SemanticChange[] = [];
+
   for (const handler of headJSX.eventHandlers) {
     // Treat inline handlers with at least minimal branching (>=2) as substantive
     if (!handler.isInline || handler.complexity >= 2) {
@@ -647,6 +658,40 @@ export function analyzeJSXChanges(
       }
     }
   }
+
+  return changes;
+}
+
+export function analyzeJSXChanges(
+  baseContext: SemanticContext,
+  headContext: SemanticContext,
+): SemanticChange[] {
+  const changes: SemanticChange[] = [];
+
+  const baseJSX = analyzeJSX(baseContext.sourceFile);
+  const headJSX = analyzeJSX(headContext.sourceFile);
+
+  // Set up tracking maps for element analysis
+  const baseByLocation = new Map<string, (typeof baseJSX.elements)[number]>();
+  const baseLocationKeysByTag = new Map<string, string[]>();
+
+  const registerBaseElement = analyzeJSXChanges_registerBaseElement.bind(
+    null,
+    baseJSX,
+    baseByLocation,
+    baseLocationKeysByTag,
+  );
+
+  for (const element of baseJSX.elements) {
+    registerBaseElement(element);
+  }
+
+  // Analyze different aspects of JSX changes
+  changes.push(
+    ...analyzeJSXElementChanges(baseJSX, headJSX, baseByLocation, baseLocationKeysByTag),
+  );
+  changes.push(...analyzeConditionalRenderingChanges(baseJSX, headJSX));
+  changes.push(...analyzeEventHandlerChanges(baseJSX, headJSX));
 
   return changes;
 }

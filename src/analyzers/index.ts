@@ -18,7 +18,9 @@ import { analyzeFunctionSignatureChangesCore } from './function-signature-analys
 import { analyzeImportStructureChangesCore } from './import-structure-analysis.js';
 import type { ParsedCode, ParsedFunction } from './parser.js';
 import { parseBoth } from './parser.js';
-import { analyzeSemanticChanges } from './semantic-analyzer.js';
+import { analyzeSemanticChangesWithConfig } from './semantic-analyzer.js';
+import type { AnalyzerConfig } from '../types/config.js';
+import { DEFAULT_CONFIG } from '../types/config.js';
 import { analyzeTypeDefinitionChangesCore } from './type-definition-analysis.js';
 import type { AnalyzeFileParams, LocatedSemanticChange } from './types.js';
 
@@ -298,13 +300,17 @@ function runStructuralAnalyzer(
         removedLines: [],
       },
     ];
-    const baseResult = analyzeSemanticChanges(baseCtx, headCtx, hunks, {
-      include: [],
-      exclude: [],
+
+    // Create minimal config for structural analysis
+    const analyzerConfig: AnalyzerConfig = {
+      ...DEFAULT_CONFIG,
       sideEffectCallees: config?.sideEffectCallees || [],
       testGlobs: config?.testGlobs || [],
       bypassLabels: config?.bypassLabels || [],
-    });
+    };
+
+    // Use analyzer with production-ready defaults
+    const baseResult = analyzeSemanticChangesWithConfig(baseCtx, headCtx, hunks, analyzerConfig);
     return baseResult.map((c) => adaptStructuralChange(c, params.modifiedFilePath));
   } catch {
     return [];
